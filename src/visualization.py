@@ -1,84 +1,95 @@
 import pandas as pd
 import plotly.express as px
-from sqlalchemy import create_engine
-from urllib.parse import quote_plus
-# MySQL connection
-password = quote_plus("Sriharsha@0704")
-engine = create_engine(
-    f"mysql+mysqlconnector://root:{password}@localhost/superstore_db"
-)
-# Load data from MySQL
-
-df = pd.read_sql(
-    "SELECT * FROM sales_data",
-    engine
-)
-print(df.head())
-print(df.shape)
-# 1. Sales by Category
-
-category_sales = (
-    df.groupby("Category")["Sales"]
-    .sum()
-    .reset_index()
-)
 
 
-fig1 = px.bar(
-    category_sales,
-    x="Category",
-    y="Sales",
-    title="Sales by Category",
-    text="Sales"
-)
+def get_numeric_columns(df):
+    """Get all numeric columns from the dataframe."""
+    return df.select_dtypes(include="number").columns.tolist()
 
 
-fig1.update_traces(
-    texttemplate="%{text:.2f}",
-    textposition="outside"
-)
-fig1.show()
-# 2. Sales by Region
-
-region_sales = (
-    df.groupby("Region")["Sales"]
-    .sum()
-    .reset_index()
-)
+def get_categorical_columns(df):
+    """Get all categorical columns from the dataframe."""
+    return df.select_dtypes(include=["object", "category"]).columns.tolist()
 
 
-fig2 = px.bar(
-    region_sales,
-    x="Region",
-    y="Sales",
-    title="Sales by Region",
-    text="Sales"
-)
+def get_date_columns(df):
+    """Get columns that contain datetime values."""
+    return df.select_dtypes(include="datetime").columns.tolist()
 
 
-fig2.update_traces(
-    texttemplate="%{text:.2f}",
-    textposition="outside"
-)
+def create_histogram(df, column):
+    """Create a histogram for a numeric column."""
+
+    fig = px.histogram(
+        df,
+        x=column,
+        title=f"Distribution of {column}"
+    )
+
+    return fig
 
 
-fig2.show()
-# 3. Yearly Sales Trend
+def create_bar_chart(df, column):
+    """Create a bar chart showing the most common categories."""
 
-year_sales = (
-    df.groupby("Order Year")["Sales"]
-    .sum()
-    .reset_index()
-)
+    data = df[column].value_counts().head(15).reset_index()
 
+    data.columns = [column, "count"]
 
-fig3 = px.line(
-    year_sales,
-    x="Order Year",
-    y="Sales",
-    title="Yearly Sales Trend",
-    markers=True
-)
+    fig = px.bar(
+        data,
+        x=column,
+        y="count",
+        title=f"Top Values in {column}"
+    )
+
+    return fig
 
 
-fig3.show()
+def create_scatter_plot(df, x_column, y_column):
+    """Create a scatter plot using two numeric columns."""
+
+    fig = px.scatter(
+        df,
+        x=x_column,
+        y=y_column,
+        title=f"{y_column} vs {x_column}"
+    )
+
+    return fig
+
+
+def create_line_chart(df, date_column, value_column):
+    """Create a line chart showing how a value changes over time."""
+
+    data = (
+        df.groupby(date_column)[value_column]
+        .sum()
+        .reset_index()
+        .sort_values(date_column)
+    )
+
+    fig = px.line(
+        data,
+        x=date_column,
+        y=value_column,
+        title=f"{value_column} Over Time"
+    )
+
+    return fig
+
+def create_correlation_heatmap(df):
+    """Create a heatmap showing correlations between numeric columns."""
+
+    numeric_data = df.select_dtypes(include="number")
+
+    correlation = numeric_data.corr()
+
+    fig = px.imshow(
+        correlation,
+        text_auto=".2f",
+        title="Correlation Heatmap",
+        aspect="auto"
+    )
+
+    return fig

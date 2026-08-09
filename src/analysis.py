@@ -1,96 +1,69 @@
 import pandas as pd
-from sqlalchemy import create_engine
-from urllib.parse import quote_plus
 
 
-password = quote_plus("Sriharsha@0704")
+def get_dataset_profile(df):
+    """
+    Generate a basic profile of the dataset.
+    """
 
-engine = create_engine(
-    f"mysql+mysqlconnector://root:{password}@localhost/superstore_db"
-)
+    profile = {
+        "rows": int(df.shape[0]),
+        "columns": int(df.shape[1]),
+        "missing_values": int(df.isna().sum().sum()),
+        "duplicate_rows": int(df.duplicated().sum()),
+        "numeric_columns": df.select_dtypes(
+            include="number"
+        ).columns.tolist(),
+        "categorical_columns": df.select_dtypes(
+            include=["object", "category"]
+        ).columns.tolist(),
+        "datetime_columns": df.select_dtypes(
+            include=["datetime"]
+        ).columns.tolist(),
+    }
 
-df = pd.read_sql(
-    "SELECT * FROM sales_data",
-    engine
-)
-
-
-#Kpi analysis
-# Total Sales
-total_sales = df["Sales"].sum()
-
-# Total Profit
-total_profit = df["Profit"].sum()
-
-
-# Total Orders
-total_orders = df["Order ID"].nunique()
-
-
-# Average Order Value
-average_order_value = (
-    total_sales / total_orders
-)
-
-# Profit Margin
-profit_margin = (
-    total_profit / total_sales
-) * 100
-#Business Insights
-# Best Category
-
-best_category = (
-    df.groupby("Category")["Sales"]
-    .sum()
-    .idxmax()
-)
+    return profile
 
 
-# Best Region
+def get_numeric_summary(df):
+    """
+    Generate descriptive statistics for numeric columns.
+    """
 
-best_region = (
-    df.groupby("Region")["Sales"]
-    .sum()
-    .idxmax()
-)
+    numeric_df = df.select_dtypes(
+        include="number"
+    )
 
-# Top Product
+    if numeric_df.empty:
+        return pd.DataFrame()
 
-top_product = (
-    df.groupby("Product Name")["Sales"]
-    .sum()
-    .idxmax()
-)
+    summary = numeric_df.describe().T
 
-# Yearly Sales
-
-yearly_sales = (
-    df.groupby("Order Year")["Sales"]
-    .sum()
-)
-
-print("Total Sales:", round(total_sales,2))
-
-print("Total Profit:", round(total_profit,2))
-
-print("Total Orders:", total_orders)
-
-print("Average Order Value:",
-      round(average_order_value,2))
-
-print("Profit Margin:",
-      round(profit_margin,2), "%")
+    return summary
 
 
-print("\nBest Category:",
-      best_category)
+def get_categorical_summary(df):
+    """
+    Generate summary information for categorical columns.
+    """
 
-print("Best Region:",
-      best_region)
+    categorical_columns = df.select_dtypes(
+        include=["object", "category"]
+    ).columns
 
-print("Top Product:",
-      top_product)
+    results = []
 
+    for column in categorical_columns:
 
-print("\nYearly Sales:")
-print(yearly_sales)
+        results.append({
+            "column": column,
+            "unique_values": int(df[column].nunique()),
+            "missing_values": int(df[column].isna().sum()),
+            "most_frequent": (
+                df[column].mode().iloc[0]
+                if not df[column].mode().empty
+                else None
+            )
+        })
+
+    return pd.DataFrame(results)
