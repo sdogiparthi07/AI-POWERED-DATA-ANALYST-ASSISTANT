@@ -93,3 +93,18 @@ def create_correlation_heatmap(df):
     )
 
     return fig
+
+def create_elbow_plot(results):
+    """Create an elbow plot for K-Means clustering."""
+
+    data = pd.DataFrame(results)
+
+    fig = px.line(
+        data,
+        x="clusters",
+        y="inertia",
+        markers=True,
+        title="K-Means Elbow Method"
+    )
+
+    return fig

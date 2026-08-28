@@ -16,187 +16,389 @@ from src.visualization import (
     create_bar_chart,
     create_scatter_plot,
     create_line_chart,
-    create_correlation_heatmap
+    create_correlation_heatmap,
+    create_elbow_plot
 )
 from src.Machine_Learning.regression import (
     train_random_forest,
     train_model_for_prediction
 )
 from src.Machine_Learning.evaluation import evaluate_regression
+from src.Machine_Learning.clustering import (
+    train_kmeans,
+    calculate_elbow
+)
 
+from src.nlp.question_answering import answer_question
+from src.GEN_AI.gemini_analyzer import analyze_dataset
 
 # PAGE CONFIGURATION
 
-
 st.set_page_config(
-    page_title="AI Powered Data Analyst Assistant",
-    page_icon="📊",
+    page_title="AI POWERED DATA ANALYST ASSISTANT",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+# SESSION STATE
 
+if "cleaned_df" not in st.session_state:
+    st.session_state["cleaned_df"] = None
+
+if "cleaning_report" not in st.session_state:
+    st.session_state["cleaning_report"] = None
+
+if "uploaded_file_name" not in st.session_state:
+    st.session_state["uploaded_file_name"] = None
+
+# HELPER FUNCTIONS
+
+def load_uploaded_dataset(uploaded_file):
+    """
+    Load CSV or Excel dataset based on the uploaded file type.
+    """
+
+    file_name = uploaded_file.name.lower()
+
+    if file_name.endswith(".csv"):
+
+        return load_csv(uploaded_file)
+
+    elif file_name.endswith(".xlsx"):
+
+        return pd.read_excel(uploaded_file)
+
+    else:
+
+        raise ValueError(
+            "Unsupported file type. Please upload a CSV or Excel file."
+        )
+
+
+def format_number(value):
+    """
+    Format numeric values for dashboard display.
+    """
+
+    if pd.isna(value):
+        return "N/A"
+
+    if abs(value) >= 1_000_000:
+        return f"{value / 1_000_000:.2f}M"
+
+    if abs(value) >= 1_000:
+        return f"{value / 1_000:.2f}K"
+
+    return f"{value:,.2f}"
 
 # SIDEBAR
 
 with st.sidebar:
 
-    st.title("📊 AI Powered Data Analyst Assistant")
+    st.markdown("## 🤖 AI POWERED DATA ANALYST ASSISTANT")
+
+    st.caption(
+        "your intelligent data analysis workspace"
+    )
 
     st.divider()
 
-    st.subheader("Workspace")
-
-    st.button("📂 Upload Dataset", width="stretch")
-    st.button("🧹 Data Cleaning", width="stretch")
-    st.button("📊 Data Analysis", width="stretch")
-    st.button("📈 Visualizations", width="stretch")
-    st.button("🤖 Machine Learning", width="stretch")
-    st.button("🔮 Predictions", width="stretch")
-    st.button("💬 AI Assistant", width="stretch")
+    page = st.radio(
+        "Navigation",
+        [
+            "🏠 Overview",
+            "📂 Data Quality",
+            "📊 Dashboard",
+            "📈 Visual Analytics",
+            "🤖 Machine Learning",
+            "💬 Ask Your Data",
+            "🧠 AI Insights"
+        ]
+    )
 
     st.divider()
 
-    st.caption("AI Powered Data Analyst Assistant v1.0")
+    if st.session_state["cleaned_df"] is not None:
 
+        st.success(
+            f"Dataset loaded: "
+            f"{st.session_state['uploaded_file_name']}"
+        )
 
-# MAIN PAGE
+    else:
 
-
-st.title("AI Powered Data Analyst Assistant")
-
-st.markdown(
-    """
-    ### Turn your data into insights.
-
-    Upload a CSV or Excel dataset and let the system automatically:
-
-    - 🧹 Clean your data
-    - 📊 Analyze patterns
-    - 📈 Create visualizations
-    - 🤖 Build machine-learning models
-    - 🔮 Generate predictions
-    - 💬 Answer questions using natural language
-    """
+        st.info(
+    "📊 Your dashboard is waiting for a dataset."
 )
 
-st.divider()
+    st.divider()
 
+    st.caption("AI POWERED DATA ANALYST ASSISTANT")
+    st.caption("Streamlit • ML • NLP • GenAI")
+
+
+# GET DATASET FROM SESSION STATE
+cleaned_df = st.session_state["cleaned_df"]
+
+# OVERVIEW PAGE
+
+if page == "🏠 Overview":
+
+    st.title("🤖 AI POWERED DATA ANALYST ASSISTANT")
+
+    st.subheader(
+        "Ask questions. Discover insights."
+    )
+    st.divider()    
+    st.markdown("### 👋 Get Started")
+
+    st.write(
+        "Upload your dataset to begin exploring its structure, "
+        "patterns, and insights."
+    )
 
 # DATASET UPLOAD
 
+    st.markdown("### 📂 Upload Your Dataset")
 
-st.subheader("📂 Upload your dataset")
+    uploaded_file = st.file_uploader(
+        "Choose a CSV or Excel file",
+        type=["csv", "xlsx"],
+        help="Upload any tabular CSV or Excel dataset."
+    )
 
-uploaded_file = st.file_uploader(
-    "Upload CSV or Excel file",
-    type=["csv", "xlsx"]
-)
+    if uploaded_file is not None:
+# Avoid unnecessary reprocessing of the same file
+        if (
+            st.session_state["uploaded_file_name"]
+            != uploaded_file.name
+        ):
 
+            try:
 
-# PROCESS UPLOADED FILE
+                with st.spinner("Loading dataset..."):
 
+                    df = load_uploaded_dataset(
+                        uploaded_file
+                    )
 
-if uploaded_file is not None:
+                with st.spinner(
+                    "Cleaning and preparing your dataset..."
+                ):
 
-    st.success(f"Uploaded: {uploaded_file.name}")
+                    cleaned_df, cleaning_report = clean_dataset(df)
+# Store dataset in session state
+                st.session_state["cleaned_df"] = cleaned_df
 
-# CSV PROCESSING
+                st.session_state["cleaning_report"] = (
+                    cleaning_report
+                )
 
-    if uploaded_file.name.lower().endswith(".csv"):
+                st.session_state["uploaded_file_name"] = (
+                    uploaded_file.name
+                )
 
-# LOAD DATASET
+                st.success(
+                    "Dataset uploaded and cleaned successfully!"
+                )
 
-        st.write("CSV file detected.")
+                st.rerun()
 
-        df = load_csv(uploaded_file)
+            except Exception as e:
 
-# CLEAN DATASET
-        
+                st.error(
+                    f"Unable to process the dataset: {e}"
+                )
 
-        cleaned_df, cleaning_report = clean_dataset(df)
+# SHOW DATASET STATUS
 
-        st.success("Dataset cleaned successfully!")
-# CLEANING REPORT
+    if cleaned_df is not None:
 
-        st.subheader("🧹 Data Cleaning Report")
+        st.divider()
+
+        st.markdown("### 📋 Current Dataset")
 
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
+
             st.metric(
-                "Original Rows",
-                cleaning_report["original_rows"]
+                "Rows",
+                f"{cleaned_df.shape[0]:,}"
             )
 
         with col2:
+
             st.metric(
-                "Cleaned Rows",
-                cleaning_report["cleaned_rows"]
+                "Columns",
+                f"{cleaned_df.shape[1]:,}"
             )
 
         with col3:
+
+            numeric_count = len(
+                cleaned_df.select_dtypes(
+                    include="number"
+                ).columns
+            )
+
             st.metric(
-                "Duplicates Removed",
-                cleaning_report["duplicates_removed"]
+                "Numeric Columns",
+                numeric_count
             )
 
         with col4:
-            st.metric(
-                "Missing Values Remaining",
-                cleaning_report["missing_values_after"]
+
+            categorical_count = len(
+                cleaned_df.select_dtypes(
+                    include=["object", "str"]
+                ).columns
             )
 
-# DETECTED DATE COLUMNS
-
-        if cleaning_report["date_columns"]:
-
-            st.subheader("📅 Detected Date Columns")
-
-            for column in cleaning_report["date_columns"]:
-
-                st.write(f"✓ {column}")
-
-# CLEANED DATASET PREVIEW
-
-        st.subheader("📋 Cleaned Dataset Preview")
-
-        st.dataframe(
-            cleaned_df.head(10),
-            width="stretch"
-        )
-
-# DATA ANALYSIS
+            st.metric(
+                "Categorical Columns",
+                categorical_count
+            )
 
         st.divider()
 
-        st.subheader("📊 Dataset Analysis")
+        st.markdown("### 🚀 Explore Your Dataset")
 
-        profile = get_dataset_profile(cleaned_df)
+        st.write(
+            "Use the navigation menu on the left to explore "
+            "data quality, dashboards, visual analytics, "
+            "machine learning, natural-language questions, "
+            "and AI-generated insights."
+        )
+
+    else:
+
+        st.divider()
+
+# DATA QUALITY PAGE
+
+elif page == "📂 Data Quality":
+
+    st.title("📂 Data Quality")
+
+    st.caption(
+        "Understand the quality and structure of your dataset."
+    )
+
+    if cleaned_df is None:
+
+        st.warning(
+            "Please upload a dataset from the Overview page first."
+        )
+
+    else:
+
+        cleaning_report = (
+            st.session_state["cleaning_report"]
+        )
+# CLEANING REPORT
+
+        st.markdown("### 🧹 Data Cleaning Summary")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+
+            st.metric(
+                "Original Rows",
+                f"{cleaning_report['original_rows']:,}"
+            )
+
+        with col2:
+
+            st.metric(
+                "Cleaned Rows",
+                f"{cleaning_report['cleaned_rows']:,}"
+            )
+
+        with col3:
+
+            st.metric(
+                "Duplicates Removed",
+                f"{cleaning_report['duplicates_removed']:,}"
+            )
+
+        with col4:
+
+            st.metric(
+                "Missing Values Remaining",
+                f"{cleaning_report['missing_values_after']:,}"
+            )
+# DATE COLUMNS
+
+        date_columns = cleaning_report.get(
+            "date_columns",
+            []
+        )
+
+        if date_columns:
+
+            st.divider()
+
+            st.markdown("### 📅 Detected Date Columns")
+
+            for column in date_columns:
+
+                st.write(f"✓ {column}")
+
+# DATASET PROFILE
+
+        st.divider()
+
+        st.markdown("### 📊 Dataset Structure")
+
+        profile = get_dataset_profile(
+            cleaned_df
+        )
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
+
             st.metric(
                 "Numeric Columns",
                 len(profile["numeric_columns"])
             )
 
         with col2:
+
             st.metric(
                 "Categorical Columns",
                 len(profile["categorical_columns"])
             )
 
         with col3:
+
             st.metric(
                 "Date Columns",
                 len(profile["datetime_columns"])
             )
+# DATA PREVIEW
+
+
+        st.divider()
+
+        st.markdown("### 📋 Cleaned Dataset Preview")
+
+        st.dataframe(
+            cleaned_df.head(20),
+            width="stretch"
+        )
+
 # NUMERICAL ANALYSIS
 
-        st.subheader("🔢 Numerical Analysis")
+        st.divider()
 
-        numeric_summary = get_numeric_summary(cleaned_df)
+        st.markdown("### 🔢 Numerical Analysis")
+
+        numeric_summary = get_numeric_summary(
+            cleaned_df
+        )
 
         if not numeric_summary.empty:
 
@@ -207,14 +409,16 @@ if uploaded_file is not None:
 
         else:
 
-            st.info("No numerical columns found.")
-
+            st.info(
+                "No numerical columns found."
+            )
 # CATEGORICAL ANALYSIS
-    
 
-        st.subheader("🔤 Categorical Analysis")
+        st.markdown("### 🔤 Categorical Analysis")
 
-        categorical_summary = get_categorical_summary(cleaned_df)
+        categorical_summary = get_categorical_summary(
+            cleaned_df
+        )
 
         if not categorical_summary.empty:
 
@@ -225,21 +429,265 @@ if uploaded_file is not None:
 
         else:
 
-            st.info("No categorical columns found.")
-# VISUALIZATIONS
+            st.info(
+                "No categorical columns found."
+            )
+
+
+# DASHBOARD PAGE
+
+elif page == "📊 Dashboard":
+
+    st.title("📊 Data Dashboard")
+
+    st.caption(
+        "Explore key metrics, patterns, and trends "
+        "automatically identified from your dataset."
+    )
+
+    if cleaned_df is None:
+
+        st.warning(
+            "Please upload a dataset from the Overview page first."
+        )
+
+    else:
+
+        df = cleaned_df
+# DATASET OVERVIEW
+
+        st.markdown("### 📋 Dataset Overview")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+
+            st.metric(
+                "Rows",
+                f"{df.shape[0]:,}"
+            )
+
+        with col2:
+
+            st.metric(
+                "Columns",
+                f"{df.shape[1]:,}"
+            )
+
+        with col3:
+
+            numeric_columns = get_numeric_columns(df)
+
+            st.metric(
+                "Numeric Fields",
+                len(numeric_columns)
+            )
+
+        with col4:
+
+            categorical_columns = (
+                get_categorical_columns(df)
+            )
+
+            st.metric(
+                "Categorical Fields",
+                len(categorical_columns)
+            )
+# DATA QUALITY SNAPSHOT
 
         st.divider()
 
-        st.subheader("📈 Visualizations")
+        st.markdown("### 🔎 Data Quality Snapshot")
 
-        numeric_columns = get_numeric_columns(cleaned_df)
-        categorical_columns = get_categorical_columns(cleaned_df)
-        date_columns = get_date_columns(cleaned_df)
+        missing_values = int(
+            df.isna().sum().sum()
+        )
+
+        duplicate_rows = int(
+            df.duplicated().sum()
+        )
+
+        complete_rows = int(
+            df.dropna().shape[0]
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            st.metric(
+                "Missing Values",
+                f"{missing_values:,}"
+            )
+
+        with col2:
+
+            st.metric(
+                "Duplicate Rows",
+                f"{duplicate_rows:,}"
+            )
+
+        with col3:
+
+            st.metric(
+                "Complete Rows",
+                f"{complete_rows:,}"
+            )
+# KEY NUMERIC METRICS
+
+        st.divider()
+
+        st.markdown("### 📈 Key Numeric Metrics")
+
+        if numeric_columns:
+
+            metric_columns = numeric_columns[:4]
+
+            metric_cards = st.columns(
+                len(metric_columns)
+            )
+
+            for card, column_name in zip(
+                metric_cards,
+                metric_columns
+            ):
+
+                average_value = df[
+                    column_name
+                ].mean()
+
+                with card:
+
+                    st.metric(
+                        label=f"Average {column_name.replace('_', ' ').title()}",
+                        value=format_number(
+                            average_value
+                        )
+                    )
+
+        else:
+
+            st.info(
+                "No numeric columns were detected."
+            )
+
+# AUTOMATIC DASHBOARD VISUALS
+
+        st.divider()
+
+        st.markdown("### 📊 Dataset Highlights")
+
+# First numeric distribution
+        if numeric_columns:
+
+            dashboard_col1, dashboard_col2 = st.columns(2)
+
+            with dashboard_col1:
+
+                st.markdown(
+                    f"**Distribution of {numeric_columns[0]}**"
+                )
+
+                histogram = create_histogram(
+                    df,
+                    numeric_columns[0]
+                )
+
+                st.plotly_chart(
+                    histogram,
+                    width="stretch"
+                )
+# First categorical distribution
+            if categorical_columns:
+
+                with dashboard_col2:
+
+                    st.markdown(
+                        f"**Category Distribution by {categorical_columns[0]}**"
+                    )
+
+                    bar_chart = create_bar_chart(
+                        df,
+                        categorical_columns[0]
+                    )
+
+                    st.plotly_chart(
+                        bar_chart,
+                        width="stretch"
+                    )
+# TIME TREND
+
+        date_columns = get_date_columns(df)
+
+        if date_columns and numeric_columns:
+
+            st.divider()
+
+            st.markdown("### 📈 Trend Over Time")
+
+            selected_date = st.selectbox(
+                "Date column",
+                date_columns,
+                key="dashboard_date"
+            )
+
+            selected_value = st.selectbox(
+                "Numeric column",
+                numeric_columns,
+                key="dashboard_value"
+            )
+
+            line_chart = create_line_chart(
+                df,
+                selected_date,
+                selected_value
+            )
+
+            st.plotly_chart(
+                line_chart,
+                width="stretch"
+            )
+# DASHBOARD NOTE
+
+        st.divider()
+
+        st.info(
+            "💡 For detailed variable selection and advanced "
+            "visual analysis, open the Visual Analytics page."
+        )
+
+
+# VISUAL ANALYTICS PAGE
+
+
+elif page == "📈 Visual Analytics":
+
+    st.title("📈 Visual Analytics")
+
+    st.caption(
+        "Create interactive visualizations and explore "
+        "relationships within your dataset."
+    )
+
+    if cleaned_df is None:
+
+        st.warning(
+            "Please upload a dataset from the Overview page first."
+        )
+
+    else:
+
+        df = cleaned_df
+
+        numeric_columns = get_numeric_columns(df)
+        categorical_columns = get_categorical_columns(df)
+        date_columns = get_date_columns(df)
+
 # HISTOGRAM
 
         if numeric_columns:
 
-            st.subheader("📊 Distribution")
+            st.markdown("### 📊 Distribution Analysis")
 
             selected_numeric = st.selectbox(
                 "Select a numeric column",
@@ -248,7 +696,7 @@ if uploaded_file is not None:
             )
 
             histogram = create_histogram(
-                cleaned_df,
+                df,
                 selected_numeric
             )
 
@@ -256,11 +704,20 @@ if uploaded_file is not None:
                 histogram,
                 width="stretch"
             )
+
+        else:
+
+            st.info(
+                "No numeric columns are available "
+                "for distribution analysis."
+            )
 # BAR CHART
 
         if categorical_columns:
 
-            st.subheader("📊 Category Analysis")
+            st.divider()
+
+            st.markdown("### 📊 Category Analysis")
 
             selected_category = st.selectbox(
                 "Select a categorical column",
@@ -269,7 +726,7 @@ if uploaded_file is not None:
             )
 
             bar_chart = create_bar_chart(
-                cleaned_df,
+                df,
                 selected_category
             )
 
@@ -278,12 +735,21 @@ if uploaded_file is not None:
                 width="stretch"
             )
 
+        else:
 
+            st.info(
+                "No categorical columns are available "
+                "for category analysis."
+            )
 # SCATTER PLOT
 
         if len(numeric_columns) >= 2:
 
-            st.subheader("🔵 Relationship Between Variables")
+            st.divider()
+
+            st.markdown(
+                "### 🔵 Relationship Between Variables"
+            )
 
             col1, col2 = st.columns(2)
 
@@ -305,7 +771,7 @@ if uploaded_file is not None:
                 )
 
             scatter_chart = create_scatter_plot(
-                cleaned_df,
+                df,
                 x_column,
                 y_column
             )
@@ -314,13 +780,13 @@ if uploaded_file is not None:
                 scatter_chart,
                 width="stretch"
             )
-
-
 # LINE CHART
 
         if date_columns and numeric_columns:
 
-            st.subheader("📈 Trend Over Time")
+            st.divider()
+
+            st.markdown("### 📈 Trend Over Time")
 
             col1, col2 = st.columns(2)
 
@@ -341,7 +807,7 @@ if uploaded_file is not None:
                 )
 
             line_chart = create_line_chart(
-                cleaned_df,
+                df,
                 selected_date,
                 selected_value
             )
@@ -354,160 +820,377 @@ if uploaded_file is not None:
 
         if len(numeric_columns) >= 2:
 
-            st.subheader("🔥 Correlation Heatmap")
+            st.divider()
+
+            st.markdown(
+                "### 🔥 Correlation Analysis"
+            )
 
             heatmap = create_correlation_heatmap(
-                cleaned_df
+                df
             )
 
             st.plotly_chart(
                 heatmap,
                 width="stretch"
             )
-# MACHINE LEARNING
 
-    st.divider()
 
-    st.subheader("🤖 Machine Learning")
+# MACHINE LEARNING PAGE
 
-    st.write(
-        "Train a regression model to predict a numerical value."
+elif page == "🤖 Machine Learning":
+
+    st.title("🤖 Machine Learning")
+
+    st.caption(
+        "Use machine learning to discover patterns "
+        "and make predictions from your dataset."
     )
 
-    numeric_columns = cleaned_df.select_dtypes(
-        include="number"
-    ).columns.tolist()
+    if cleaned_df is None:
 
-    target_column = st.selectbox(
-        "Select target column",
-        numeric_columns,
-        key="ml_target"
-    )
-
-
-    @st.cache_data
-    def train_model(df, target_column):
-
-        model, y_test, predictions = train_random_forest(
-            df,
-            target_column
+        st.warning(
+            "Please upload a dataset from the Overview page first."
         )
 
-        results = evaluate_regression(
-            y_test,
-            predictions
+    else:
+
+        df = cleaned_df
+
+        ml_type = st.selectbox(
+            "Select machine learning method",
+            [
+                "Regression",
+                "Clustering"
+            ],
+            key="ml_type"
+        )
+# REGRESSION
+
+        if ml_type == "Regression":
+
+            st.markdown("### 📈 Regression")
+
+            st.write(
+                "Train a Random Forest regression model "
+                "to predict a numerical target."
+            )
+
+            numeric_columns = df.select_dtypes(
+                include="number"
+            ).columns.tolist()
+
+            if not numeric_columns:
+
+                st.warning(
+                    "Regression requires at least one "
+                    "numeric column."
+                )
+
+            else:
+
+                target_column = st.selectbox(
+                    "Select target column",
+                    numeric_columns,
+                    key="ml_target"
+                )
+
+                @st.cache_data
+                def train_model(
+                    data,
+                    target
+                ):
+
+                    model, y_test, predictions = (
+                        train_random_forest(
+                            data,
+                            target
+                        )
+                    )
+
+                    results = evaluate_regression(
+                        y_test,
+                        predictions
+                    )
+
+                    return results
+
+                if st.button(
+                    "🚀 Train Regression Model"
+                ):
+
+                    with st.spinner(
+                        "Training regression model..."
+                    ):
+
+                        results = train_model(
+                            df,
+                            target_column
+                        )
+
+                    st.success(
+                        "Model trained successfully!"
+                    )
+
+                    st.markdown(
+                        "### 📊 Model Evaluation"
+                    )
+
+                    col1, col2, col3, col4 = (
+                        st.columns(4)
+                    )
+
+                    with col1:
+
+                        st.metric(
+                            "MAE",
+                            f"{results['mae']:.2f}"
+                        )
+
+                    with col2:
+
+                        st.metric(
+                            "MSE",
+                            f"{results['mse']:.2f}"
+                        )
+
+                    with col3:
+
+                        st.metric(
+                            "RMSE",
+                            f"{results['rmse']:.2f}"
+                        )
+
+                    with col4:
+
+                        st.metric(
+                            "R² Score",
+                            f"{results['r2']:.2f}"
+                        )
+
+# CLUSTERING
+
+        elif ml_type == "Clustering":
+
+            st.markdown("### 🔵 K-Means Clustering")
+
+            st.write(
+                "Group similar records based on "
+                "their numeric characteristics."
+            )
+
+            numeric_columns = df.select_dtypes(
+                include="number"
+            ).columns.tolist()
+
+            if len(numeric_columns) < 2:
+
+                st.warning(
+                    "Clustering requires at least two "
+                    "numeric columns."
+                )
+
+            else:
+
+                st.markdown("### 📉 Elbow Method")
+
+                elbow_results = calculate_elbow(
+                    df
+                )
+
+                elbow_chart = create_elbow_plot(
+                    elbow_results
+                )
+
+                st.plotly_chart(
+                    elbow_chart,
+                    width="stretch"
+                )
+
+                n_clusters = st.slider(
+                    "Select number of clusters",
+                    min_value=2,
+                    max_value=7,
+                    value=3,
+                    key="n_clusters"
+                )
+
+                if st.button(
+                    "🚀 Run K-Means"
+                ):
+
+                    with st.spinner(
+                        "Running K-Means clustering..."
+                    ):
+
+                        (
+                            model,
+                            scaler,
+                            clustered_data,
+                            score
+                        ) = train_kmeans(
+                            df,
+                            n_clusters
+                        )
+
+                    st.success(
+                        "K-Means clustering completed!"
+                    )
+
+                    st.markdown(
+                        "### 📊 Clustering Evaluation"
+                    )
+
+                    st.metric(
+                        "Silhouette Score",
+                        f"{score:.2f}"
+                    )
+
+                    st.markdown(
+                        "### 🔵 Cluster Results"
+                    )
+
+                    st.dataframe(
+                        clustered_data.head(20),
+                        width="stretch"
+                    )
+
+
+# ASK YOUR DATA PAGE
+
+elif page == "💬 Ask Your Data":
+
+    st.title("💬 Ask Your Data")
+
+    st.caption(
+        "Ask questions about your dataset using natural language."
+    )
+
+    if cleaned_df is None:
+
+        st.warning(
+            "Please upload a dataset from the Overview page first."
         )
 
-        return results
+    else:
 
-
-    if st.button("🚀 Train Regression Model"):
-
-        with st.spinner("Training regression model..."):
-
-            results = train_model(
-                cleaned_df,
-                target_column
+        question = st.text_input(
+            "Ask a question about your dataset...",
+            placeholder=(
+                "Example: Which category has the highest value?"
             )
+        )
 
-        st.success("Model trained successfully!")
+        if st.button("🔍 Ask"):
 
-        st.subheader("📊 Model Evaluation")
+            if not question.strip():
 
-        col1, col2, col3, col4 = st.columns(4)
+                st.warning(
+                    "Please enter a question."
+                )
 
-        with col1:
-            st.metric(
-                "MAE",
-                f"{results['mae']:.2f}"
-            )
+            else:
 
-        with col2:
-            st.metric(
-                "MSE",
-                f"{results['mse']:.2f}"
-            )
+                with st.spinner(
+                    "Analyzing your question..."
+                ):
 
-        with col3:
-            st.metric(
-                "RMSE",
-                f"{results['rmse']:.2f}"
-            )
+                    answer = answer_question(
+                        cleaned_df,
+                        question
+                    )
 
-        with col4:
-            st.metric(
-                "R² Score",
-                f"{results['r2']:.2f}")
-#PREDICTIONS
+                st.divider()
 
-    st.divider()
+                st.markdown("### 💡 Answer")
 
-    st.subheader("🔮 Interactive Predictions")
+# GROUPED RESULT WITH CHART
 
-    st.write(
-        "Enter values for the features and generate a prediction."
+                if isinstance(answer, tuple):
+
+                    results, grouped = answer
+
+                    for item in results:
+
+                        st.write(item)
+
+                    st.markdown(
+                        "### 📊 Visualization"
+                    )
+
+                    if (
+                        "time" in question.lower()
+                        or "trend" in question.lower()
+                    ):
+
+                        st.line_chart(
+                            grouped
+                        )
+
+                    else:
+
+                        st.bar_chart(
+                            grouped
+                        )
+
+# LIST RESULT
+
+                elif isinstance(answer, list):
+
+                    for item in answer:
+
+                        st.write(item)
+
+# TEXT RESULT
+
+                else:
+
+                    st.write(answer)
+
+
+# AI INSIGHTS PAGE
+
+elif page == "🧠 AI Insights":
+
+    st.title("🧠 AI-Generated Insights")
+
+    st.caption(
+        "Use GenAI to automatically identify important "
+        "patterns and insights from your dataset."
     )
 
-    prediction_model, feature_data = train_model_for_prediction(
-        cleaned_df,
-        target_column
-    )
+    if cleaned_df is None:
 
-    input_data = {}
+        st.warning(
+            "Please upload a dataset from the Overview page first."
+        )
 
-    for column in feature_data.columns:
+    else:
 
-        if pd.api.types.is_numeric_dtype(
-            feature_data[column]
+        st.write(
+            "The AI analyst will examine the dataset and "
+            "generate meaningful observations based on "
+            "the available data."
+        )
+
+        if st.button(
+            "✨ Generate AI Insights"
         ):
 
-            default_value = float(
-                feature_data[column].iloc[0]
+            with st.spinner(
+                "AI is analyzing your dataset..."
+            ):
+
+                ai_insights = analyze_dataset(
+                    cleaned_df
+                )
+
+            st.divider()
+
+            st.markdown(
+                "### 💡 AI Analysis"
             )
 
-            input_data[column] = st.number_input(
-                column,
-                value=default_value,
-                key=f"prediction_{column}"
+            st.write(
+                ai_insights
             )
-
-        else:
-
-            options = (
-                feature_data[column]
-                .dropna()
-                .astype(str)
-                .unique()
-                .tolist()
-            )
-
-            input_data[column] = st.selectbox(
-                column,
-                options,
-                key=f"prediction_{column}"
-            )
-
-    prediction_input = pd.DataFrame(
-        [input_data]
-    )
-
-    if st.button("🔮 Predict"):
-
-        with st.spinner("Generating prediction..."):
-
-            prediction = prediction_model.predict(
-                prediction_input
-            )[0]
-
-        st.success(
-            "Prediction generated successfully!"
-        )
-
-        st.metric(
-            "Predicted Value",
-            f"{prediction:.2f}"
-        )
-else:
-    st.warning("Excel support will be added next.")
-
-
