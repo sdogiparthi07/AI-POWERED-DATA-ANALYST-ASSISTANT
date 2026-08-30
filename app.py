@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+
 
 from src.data_loader import load_csv
 from src.analysis import (
@@ -19,14 +21,15 @@ from src.visualization import (
     create_correlation_heatmap,
     create_elbow_plot
 )
-from src.Machine_Learning.regression import (
-    train_random_forest,
-    train_model_for_prediction
-)
-from src.Machine_Learning.evaluation import evaluate_regression
 from src.Machine_Learning.clustering import (
     train_kmeans,
-    calculate_elbow
+    calculate_elbow,
+    get_clustering_columns
+)
+from src.Machine_Learning.model_comparison import (
+    compare_regression_models,
+    compare_classification_models
+        
 )
 
 from src.nlp.question_answering import answer_question
@@ -40,6 +43,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
 # SESSION STATE
 
 if "cleaned_df" not in st.session_state:
@@ -51,6 +56,7 @@ if "cleaning_report" not in st.session_state:
 if "uploaded_file_name" not in st.session_state:
     st.session_state["uploaded_file_name"] = None
 
+
 # HELPER FUNCTIONS
 
 def load_uploaded_dataset(uploaded_file):
@@ -61,15 +67,12 @@ def load_uploaded_dataset(uploaded_file):
     file_name = uploaded_file.name.lower()
 
     if file_name.endswith(".csv"):
-
         return load_csv(uploaded_file)
 
     elif file_name.endswith(".xlsx"):
-
         return pd.read_excel(uploaded_file)
 
     else:
-
         raise ValueError(
             "Unsupported file type. Please upload a CSV or Excel file."
         )
@@ -90,7 +93,6 @@ def format_number(value):
         return f"{value / 1_000:.2f}K"
 
     return f"{value:,.2f}"
-
 # SIDEBAR
 
 with st.sidebar:
@@ -119,17 +121,14 @@ with st.sidebar:
     st.divider()
 
     if st.session_state["cleaned_df"] is not None:
-
         st.success(
             f"Dataset loaded: "
             f"{st.session_state['uploaded_file_name']}"
         )
-
     else:
-
         st.info(
-    "📊 Your dashboard is waiting for a dataset."
-)
+            "📊 Your dashboard is waiting for a dataset."
+        )
 
     st.divider()
 
@@ -138,7 +137,9 @@ with st.sidebar:
 
 
 # GET DATASET FROM SESSION STATE
+
 cleaned_df = st.session_state["cleaned_df"]
+
 
 # OVERVIEW PAGE
 
@@ -149,7 +150,9 @@ if page == "🏠 Overview":
     st.subheader(
         "Ask questions. Discover insights."
     )
-    st.divider()    
+
+    st.divider()
+
     st.markdown("### 👋 Get Started")
 
     st.write(
@@ -177,7 +180,6 @@ if page == "🏠 Overview":
             try:
 
                 with st.spinner("Loading dataset..."):
-
                     df = load_uploaded_dataset(
                         uploaded_file
                     )
@@ -185,8 +187,8 @@ if page == "🏠 Overview":
                 with st.spinner(
                     "Cleaning and preparing your dataset..."
                 ):
-
                     cleaned_df, cleaning_report = clean_dataset(df)
+
 # Store dataset in session state
                 st.session_state["cleaned_df"] = cleaned_df
 
@@ -221,14 +223,12 @@ if page == "🏠 Overview":
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-
             st.metric(
                 "Rows",
                 f"{cleaned_df.shape[0]:,}"
             )
 
         with col2:
-
             st.metric(
                 "Columns",
                 f"{cleaned_df.shape[1]:,}"
@@ -275,6 +275,7 @@ if page == "🏠 Overview":
 
         st.divider()
 
+
 # DATA QUALITY PAGE
 
 elif page == "📂 Data Quality":
@@ -296,6 +297,7 @@ elif page == "📂 Data Quality":
         cleaning_report = (
             st.session_state["cleaning_report"]
         )
+
 # CLEANING REPORT
 
         st.markdown("### 🧹 Data Cleaning Summary")
@@ -303,28 +305,24 @@ elif page == "📂 Data Quality":
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-
             st.metric(
                 "Original Rows",
                 f"{cleaning_report['original_rows']:,}"
             )
 
         with col2:
-
             st.metric(
                 "Cleaned Rows",
                 f"{cleaning_report['cleaned_rows']:,}"
             )
 
         with col3:
-
             st.metric(
                 "Duplicates Removed",
                 f"{cleaning_report['duplicates_removed']:,}"
             )
 
         with col4:
-
             st.metric(
                 "Missing Values Remaining",
                 f"{cleaning_report['missing_values_after']:,}"
@@ -343,7 +341,6 @@ elif page == "📂 Data Quality":
             st.markdown("### 📅 Detected Date Columns")
 
             for column in date_columns:
-
                 st.write(f"✓ {column}")
 
 # DATASET PROFILE
@@ -359,27 +356,23 @@ elif page == "📂 Data Quality":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-
             st.metric(
                 "Numeric Columns",
                 len(profile["numeric_columns"])
             )
 
         with col2:
-
             st.metric(
                 "Categorical Columns",
                 len(profile["categorical_columns"])
             )
 
         with col3:
-
             st.metric(
                 "Date Columns",
                 len(profile["datetime_columns"])
             )
 # DATA PREVIEW
-
 
         st.divider()
 
@@ -412,6 +405,7 @@ elif page == "📂 Data Quality":
             st.info(
                 "No numerical columns found."
             )
+
 # CATEGORICAL ANALYSIS
 
         st.markdown("### 🔤 Categorical Analysis")
@@ -454,6 +448,7 @@ elif page == "📊 Dashboard":
     else:
 
         df = cleaned_df
+
 # DATASET OVERVIEW
 
         st.markdown("### 📋 Dataset Overview")
@@ -461,14 +456,12 @@ elif page == "📊 Dashboard":
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-
             st.metric(
                 "Rows",
                 f"{df.shape[0]:,}"
             )
 
         with col2:
-
             st.metric(
                 "Columns",
                 f"{df.shape[1]:,}"
@@ -493,6 +486,7 @@ elif page == "📊 Dashboard":
                 "Categorical Fields",
                 len(categorical_columns)
             )
+
 # DATA QUALITY SNAPSHOT
 
         st.divider()
@@ -514,25 +508,23 @@ elif page == "📊 Dashboard":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-
             st.metric(
                 "Missing Values",
                 f"{missing_values:,}"
             )
 
         with col2:
-
             st.metric(
                 "Duplicate Rows",
                 f"{duplicate_rows:,}"
             )
 
         with col3:
-
             st.metric(
                 "Complete Rows",
                 f"{complete_rows:,}"
             )
+
 # KEY NUMERIC METRICS
 
         st.divider()
@@ -557,9 +549,11 @@ elif page == "📊 Dashboard":
                 ].mean()
 
                 with card:
-
                     st.metric(
-                        label=f"Average {column_name.replace('_', ' ').title()}",
+                        label=(
+                            f"Average "
+                            f"{column_name.replace('_', ' ').title()}"
+                        ),
                         value=format_number(
                             average_value
                         )
@@ -578,6 +572,7 @@ elif page == "📊 Dashboard":
         st.markdown("### 📊 Dataset Highlights")
 
 # First numeric distribution
+
         if numeric_columns:
 
             dashboard_col1, dashboard_col2 = st.columns(2)
@@ -597,13 +592,16 @@ elif page == "📊 Dashboard":
                     histogram,
                     width="stretch"
                 )
+
 # First categorical distribution
+
             if categorical_columns:
 
                 with dashboard_col2:
 
                     st.markdown(
-                        f"**Category Distribution by {categorical_columns[0]}**"
+                        f"**Category Distribution by "
+                        f"{categorical_columns[0]}**"
                     )
 
                     bar_chart = create_bar_chart(
@@ -615,7 +613,8 @@ elif page == "📊 Dashboard":
                         bar_chart,
                         width="stretch"
                     )
-# TIME TREND
+
+ # TIME TREND
 
         date_columns = get_date_columns(df)
 
@@ -647,6 +646,7 @@ elif page == "📊 Dashboard":
                 line_chart,
                 width="stretch"
             )
+
 # DASHBOARD NOTE
 
         st.divider()
@@ -658,7 +658,6 @@ elif page == "📊 Dashboard":
 
 
 # VISUAL ANALYTICS PAGE
-
 
 elif page == "📈 Visual Analytics":
 
@@ -711,6 +710,7 @@ elif page == "📈 Visual Analytics":
                 "No numeric columns are available "
                 "for distribution analysis."
             )
+
 # BAR CHART
 
         if categorical_columns:
@@ -741,6 +741,7 @@ elif page == "📈 Visual Analytics":
                 "No categorical columns are available "
                 "for category analysis."
             )
+
 # SCATTER PLOT
 
         if len(numeric_columns) >= 2:
@@ -780,7 +781,8 @@ elif page == "📈 Visual Analytics":
                 scatter_chart,
                 width="stretch"
             )
-# LINE CHART
+
+ # LINE CHART
 
         if date_columns and numeric_columns:
 
@@ -816,6 +818,7 @@ elif page == "📈 Visual Analytics":
                 line_chart,
                 width="stretch"
             )
+
 # CORRELATION HEATMAP
 
         if len(numeric_columns) >= 2:
@@ -843,8 +846,7 @@ elif page == "🤖 Machine Learning":
     st.title("🤖 Machine Learning")
 
     st.caption(
-        "Use machine learning to discover patterns "
-        "and make predictions from your dataset."
+        "Train machine learning models using your dataset."
     )
 
     if cleaned_df is None:
@@ -858,21 +860,22 @@ elif page == "🤖 Machine Learning":
         df = cleaned_df
 
         ml_type = st.selectbox(
-            "Select machine learning method",
+            "Select machine learning type",
             [
                 "Regression",
+                "Classification",
                 "Clustering"
             ],
             key="ml_type"
         )
-# REGRESSION
 
+# REGRESSION
         if ml_type == "Regression":
 
             st.markdown("### 📈 Regression")
 
             st.write(
-                "Train a Random Forest regression model "
+                "Train and compare regression models "
                 "to predict a numerical target."
             )
 
@@ -883,8 +886,8 @@ elif page == "🤖 Machine Learning":
             if not numeric_columns:
 
                 st.warning(
-                    "Regression requires at least one "
-                    "numeric column."
+                    "No numerical columns are available "
+                    "for regression."
                 )
 
             else:
@@ -892,170 +895,423 @@ elif page == "🤖 Machine Learning":
                 target_column = st.selectbox(
                     "Select target column",
                     numeric_columns,
-                    key="ml_target"
+                    key="regression_target"
                 )
 
-                @st.cache_data
-                def train_model(
-                    data,
-                    target
+                if st.button(
+                    "🚀 Compare Regression Models",
+                    key="compare_regression"
                 ):
 
-                    model, y_test, predictions = (
-                        train_random_forest(
-                            data,
-                            target
+                    try:
+
+                        results_df, best_model = (
+                            compare_regression_models(
+                                df,
+                                target_column
+                            )
                         )
-                    )
 
-                    results = evaluate_regression(
-                        y_test,
-                        predictions
-                    )
+                        st.success(
+                            "All regression models trained successfully!"
+                        )
 
-                    return results
+                        st.markdown(
+                            "### 📊 Model Comparison"
+                        )
+
+                        st.dataframe(
+                            results_df,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                        st.markdown(
+                            "### 🏆 Best Regression Model"
+                        )
+
+                        st.success(
+                            f"Best model based on RMSE: "
+                            f"{best_model}"
+                        )
+
+                    except Exception as error:
+
+                        import traceback
+
+                        st.error(
+                            f"Unable to train regression models: {error}"
+                        )
+
+                        st.code(
+                            traceback.format_exc()
+                        )
+
+
+# CLASSIFICATION
+
+        elif ml_type == "Classification":
+
+            st.markdown("### 🎯 Classification")
+
+            st.write(
+                "Train and compare classification models "
+                "to predict a categorical target."
+            )
+
+            classification_columns = []
+
+            for column in df.columns:
+
+                unique_values = df[column].nunique()
+
+                if 2 <= unique_values <= 20:
+                    classification_columns.append(column)
+
+            if not classification_columns:
+
+                st.warning(
+                    "No suitable categorical target columns were found."
+                )
+
+            else:
+
+                target_column = st.selectbox(
+                    "Select target column",
+                    classification_columns,
+                    key="classification_target"
+                )
+
+                st.info(
+                    f"Selected target has "
+                    f"{df[target_column].nunique()} unique classes."
+                )
 
                 if st.button(
-                    "🚀 Train Regression Model"
+                    "🚀 Compare Classification Models",
+                    key="compare_classification"
                 ):
 
-                    with st.spinner(
-                        "Training regression model..."
-                    ):
+                    try:
 
-                        results = train_model(
-                            df,
-                            target_column
+                        results_df, best_model = (
+                            compare_classification_models(
+                                df,
+                                target_column
+                            )
                         )
 
-                    st.success(
-                        "Model trained successfully!"
-                    )
-
-                    st.markdown(
-                        "### 📊 Model Evaluation"
-                    )
-
-                    col1, col2, col3, col4 = (
-                        st.columns(4)
-                    )
-
-                    with col1:
-
-                        st.metric(
-                            "MAE",
-                            f"{results['mae']:.2f}"
+                        st.success(
+                            "All classification models "
+                            "trained successfully!"
                         )
 
-                    with col2:
-
-                        st.metric(
-                            "MSE",
-                            f"{results['mse']:.2f}"
+                        st.markdown(
+                            "### 📊 Model Comparison"
                         )
 
-                    with col3:
-
-                        st.metric(
-                            "RMSE",
-                            f"{results['rmse']:.2f}"
+                        st.dataframe(
+                            results_df,
+                            width="stretch"
                         )
 
-                    with col4:
-
-                        st.metric(
-                            "R² Score",
-                            f"{results['r2']:.2f}"
+                        st.markdown(
+                            "### 🏆 Best Classification Model"
                         )
 
-# CLUSTERING
+                        st.success(
+                            f"Best model based on F1 Score: "
+                            f"{best_model}"
+                        )
+
+                    except Exception as error:
+
+                        st.error(
+                            f"Unable to train classification "
+                            f"models: {error}"
+                        )
+
+
+#CLUSTERING
 
         elif ml_type == "Clustering":
 
             st.markdown("### 🔵 K-Means Clustering")
 
-            st.write(
-                "Group similar records based on "
-                "their numeric characteristics."
+            clustering_columns = get_clustering_columns(
+                df
             )
 
-            numeric_columns = df.select_dtypes(
-                include="number"
-            ).columns.tolist()
-
-            if len(numeric_columns) < 2:
+            if len(clustering_columns) < 2:
 
                 st.warning(
-                    "Clustering requires at least two "
-                    "numeric columns."
+                    "At least two useful numeric columns "
+                    "are required for clustering."
                 )
 
             else:
 
-                st.markdown("### 📉 Elbow Method")
-
-                elbow_results = calculate_elbow(
-                    df
+                st.write(
+                    "Columns used for clustering:"
                 )
 
-                elbow_chart = create_elbow_plot(
+                st.write(
+                    ", ".join(clustering_columns)
+                )
+
+# ELBOW METHOD
+
+                st.markdown(
+                    "### 📉 Elbow Method"
+                )
+
+                try:
+
+                    elbow_results = calculate_elbow(
+                        df
+                    )
+
+                    elbow_df = pd.DataFrame(
+                        elbow_results
+                    )
+
+                    elbow_chart = create_elbow_plot(
                     elbow_results
-                )
+                    )
 
-                st.plotly_chart(
-                    elbow_chart,
-                    width="stretch"
+                    st.plotly_chart(
+                        elbow_chart,
+                        use_container_width=True
+                    )
+
+                    st.caption(
+                        "The elbow point can help choose "
+                        "a suitable number of clusters."
+                    )
+
+                except ValueError as error:
+
+                    st.warning(
+                        str(error)
+                    )
+
+# K-MEANS CLUSTERING
+
+                max_clusters = min(7,len(df) - 1)
+                default_clusters = min(
+                    3,
+                    max_clusters
                 )
 
                 n_clusters = st.slider(
-                    "Select number of clusters",
+                    "Number of clusters",
                     min_value=2,
-                    max_value=7,
-                    value=3,
-                    key="n_clusters"
+                    max_value=max_clusters,
+                    value=default_clusters,
+                    key="clustering_clusters"
                 )
 
                 if st.button(
-                    "🚀 Run K-Means"
+                    "Run Clustering",
+                    key="run_clustering"
                 ):
 
-                    with st.spinner(
-                        "Running K-Means clustering..."
-                    ):
+                    try:
 
-                        (
-                            model,
-                            scaler,
-                            clustered_data,
-                            score
-                        ) = train_kmeans(
-                            df,
-                            n_clusters
+                        model, scaler, result, score = (
+                            train_kmeans(
+                                df,
+                                n_clusters
+                            )
+                        )
+                        st.markdown("### 🎯 Clustering Quality")
+
+                        st.metric(
+                            "Silhouette Score",
+                            f"{score:.3f}"
+                        )
+                        st.success(
+                            "Clustering completed successfully."
                         )
 
-                    st.success(
-                        "K-Means clustering completed!"
-                    )
+                        st.metric(
+                            "Silhouette Score",
+                            round(score, 3)
+                        )
 
-                    st.markdown(
-                        "### 📊 Clustering Evaluation"
-                    )
+                        st.markdown("### 📊 Cluster Summary")
 
-                    st.metric(
-                        "Silhouette Score",
-                        f"{score:.2f}"
-                    )
+                        cluster_summary = (
+                            result["cluster"]
+                            .value_counts()
+                            .sort_index()
+                            .reset_index()
+                        )
 
-                    st.markdown(
-                        "### 🔵 Cluster Results"
-                    )
+                        cluster_summary.columns = [
+                            "Cluster",
+                            "Records"
+                        ]
 
-                    st.dataframe(
-                        clustered_data.head(20),
-                        width="stretch"
-                    )
+                        st.dataframe(
+                            cluster_summary,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        st.markdown("### 📊 Cluster Summary")
 
+                        cluster_summary = (
+                                result
+                                .groupby("cluster")
+                                .agg(
+                                    Rows=("cluster", "size")
+                                )
+                                .reset_index()
+                            )
 
+                        cluster_summary["Percentage"] = (
+                                cluster_summary["Rows"]
+                                / len(result)
+                                * 100
+                            ).round(2)
+
+                        st.dataframe(
+                                cluster_summary,
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        st.markdown("### 🔎 Cluster Profiles")
+
+                        cluster_profiles = (
+                            result
+                            .groupby("cluster")
+                            .mean(numeric_only=True)
+                            .reset_index()
+                        )
+
+                        st.dataframe(
+                            cluster_profiles,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        st.markdown("### 📈 Cluster Distribution")
+
+                        cluster_counts = (
+                            result["cluster"]
+                            .value_counts()
+                            .sort_index()
+                            .reset_index()
+                        )
+
+                        cluster_counts.columns = [
+                            "Cluster",
+                            "Rows"
+                        ]
+
+                        fig = px.bar(
+                            cluster_counts,
+                            x="Cluster",
+                            y="Rows",
+                            title="Number of Records in Each Cluster"
+                        )
+
+                        st.plotly_chart(
+                            fig,
+                            use_container_width=True
+                        )
+                        st.markdown("### 🎯 Cluster Visualization")
+
+                        cluster_columns = [
+                            column
+                            for column in result.columns
+                            if column != "cluster"
+                        ]
+
+                        if len(cluster_columns) >= 2:
+
+                            x_column = cluster_columns[0]
+                            y_column = cluster_columns[1]
+
+                            fig = px.scatter(
+                                result,
+                                x=x_column,
+                                y=y_column,
+                                color="cluster",
+                                title=f"{x_column} vs {y_column} by Cluster"
+                            )
+
+                            st.plotly_chart(
+                                fig,
+                                use_container_width=True
+                            )
+
+                        else:
+
+                            st.info(
+                                "At least two numeric columns are required "
+                                "for cluster visualization."
+                            )
+                        st.markdown("### 📋 Clustered Data")
+
+                        st.dataframe(
+                            result.head(100),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        st.markdown(
+                            "### 🔵 Cluster Visualization"
+                        )
+
+                        clustering_columns = (
+                            get_clustering_columns(df)
+                        )
+
+                        if len(clustering_columns) >= 2:
+
+                            col1, col2 = st.columns(2)
+
+                            with col1:
+
+                                x_column = st.selectbox(
+                                    "X-axis",
+                                    clustering_columns,
+                                    key="cluster_x"
+                                )
+
+                            with col2:
+                                y_column = [
+                                    column
+                                    for column in cluster_columns
+                                    if column != x_column
+                                ]
+
+                                y_column = st.selectbox(
+                                    "Y-axis",
+                                    y_column,
+                                    key="cluster_y_axis"
+                                )
+
+                            cluster_chart = px.scatter(
+                                result,
+                                x=x_column,
+                                y=y_column,
+                                color="cluster",
+                                title=(
+                                    f"Clusters: "
+                                    f"{x_column} vs {y_column}"
+                                )
+                            )
+
+                            st.plotly_chart(
+                                cluster_chart,
+                                use_container_width=True
+                            )
+
+                    except ValueError as error:
+
+                        st.error(
+                            str(error)
+                        )
 # ASK YOUR DATA PAGE
 
 elif page == "💬 Ask Your Data":
@@ -1111,7 +1367,6 @@ elif page == "💬 Ask Your Data":
                     results, grouped = answer
 
                     for item in results:
-
                         st.write(item)
 
                     st.markdown(
@@ -1138,7 +1393,6 @@ elif page == "💬 Ask Your Data":
                 elif isinstance(answer, list):
 
                     for item in answer:
-
                         st.write(item)
 
 # TEXT RESULT
@@ -1152,7 +1406,7 @@ elif page == "💬 Ask Your Data":
 
 elif page == "🧠 AI Insights":
 
-    st.title("🧠 AI-Generated Insights")
+    st.title("🧠 AI Generated Insights")
 
     st.caption(
         "Use GenAI to automatically identify important "
@@ -1194,3 +1448,4 @@ elif page == "🧠 AI Insights":
             st.write(
                 ai_insights
             )
+

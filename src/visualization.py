@@ -3,22 +3,45 @@ import plotly.express as px
 
 
 def get_numeric_columns(df):
-    """Get all numeric columns from the dataframe."""
-    return df.select_dtypes(include="number").columns.tolist()
+    """Get numeric columns."""
+
+    return df.select_dtypes(
+        include="number"
+    ).columns.tolist()
 
 
 def get_categorical_columns(df):
-    """Get all categorical columns from the dataframe."""
-    return df.select_dtypes(include=["object", "category"]).columns.tolist()
+    """Get categorical columns."""
+
+    return df.select_dtypes(
+        include=["object", "category", "bool"]
+    ).columns.tolist()
 
 
 def get_date_columns(df):
-    """Get columns that contain datetime values."""
-    return df.select_dtypes(include="datetime").columns.tolist()
+    """Get datetime columns."""
+
+    return [
+        column
+        for column in df.columns
+        if pd.api.types.is_datetime64_any_dtype(
+            df[column]
+        )
+    ]
 
 
 def create_histogram(df, column):
     """Create a histogram for a numeric column."""
+
+    if column not in df.columns:
+        raise ValueError(
+            "Selected column does not exist."
+        )
+
+    if column not in get_numeric_columns(df):
+        raise ValueError(
+            "Histogram requires a numeric column."
+        )
 
     fig = px.histogram(
         df,
@@ -30,11 +53,29 @@ def create_histogram(df, column):
 
 
 def create_bar_chart(df, column):
-    """Create a bar chart showing the most common categories."""
+    """Create a bar chart for a categorical column."""
 
-    data = df[column].value_counts().head(15).reset_index()
+    if column not in df.columns:
+        raise ValueError(
+            "Selected column does not exist."
+        )
 
-    data.columns = [column, "count"]
+    if column not in get_categorical_columns(df):
+        raise ValueError(
+            "Bar chart requires a categorical column."
+        )
+
+    data = (
+        df[column]
+        .value_counts()
+        .head(15)
+        .reset_index()
+    )
+
+    data.columns = [
+        column,
+        "count"
+    ]
 
     fig = px.bar(
         data,
@@ -46,8 +87,24 @@ def create_bar_chart(df, column):
     return fig
 
 
-def create_scatter_plot(df, x_column, y_column):
-    """Create a scatter plot using two numeric columns."""
+def create_scatter_plot(
+    df,
+    x_column,
+    y_column
+):
+    """Create a scatter plot for two numeric columns."""
+
+    numeric_columns = get_numeric_columns(df)
+
+    if x_column not in numeric_columns:
+        raise ValueError(
+            "X-axis must be a numeric column."
+        )
+
+    if y_column not in numeric_columns:
+        raise ValueError(
+            "Y-axis must be a numeric column."
+        )
 
     fig = px.scatter(
         df,
@@ -59,8 +116,22 @@ def create_scatter_plot(df, x_column, y_column):
     return fig
 
 
-def create_line_chart(df, date_column, value_column):
-    """Create a line chart showing how a value changes over time."""
+def create_line_chart(
+    df,
+    date_column,
+    value_column
+):
+    """Create a line chart over time."""
+
+    if date_column not in get_date_columns(df):
+        raise ValueError(
+            "Line chart requires a date column."
+        )
+
+    if value_column not in get_numeric_columns(df):
+        raise ValueError(
+            "Line chart requires a numeric value column."
+        )
 
     data = (
         df.groupby(date_column)[value_column]
@@ -78,10 +149,18 @@ def create_line_chart(df, date_column, value_column):
 
     return fig
 
-def create_correlation_heatmap(df):
-    """Create a heatmap showing correlations between numeric columns."""
 
-    numeric_data = df.select_dtypes(include="number")
+def create_correlation_heatmap(df):
+    """Create a correlation heatmap."""
+
+    numeric_data = df.select_dtypes(
+        include="number"
+    )
+
+    if numeric_data.shape[1] < 2:
+        raise ValueError(
+            "At least two numeric columns are required."
+        )
 
     correlation = numeric_data.corr()
 
@@ -94,8 +173,14 @@ def create_correlation_heatmap(df):
 
     return fig
 
+
 def create_elbow_plot(results):
     """Create an elbow plot for K-Means clustering."""
+
+    if not results:
+        raise ValueError(
+            "No clustering results available."
+        )
 
     data = pd.DataFrame(results)
 

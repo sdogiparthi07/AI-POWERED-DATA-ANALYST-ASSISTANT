@@ -10,7 +10,9 @@ from sklearn.metrics import (
 
 
 def evaluate_regression(y_true, predictions):
-    """Calculate common regression metrics."""
+    """
+    Calculate regression evaluation metrics.
+    """
 
     mae = mean_absolute_error(
         y_true,
@@ -38,7 +40,9 @@ def evaluate_regression(y_true, predictions):
 
 
 def evaluate_classification(y_true, predictions):
-    """Calculate common classification metrics."""
+    """
+    Calculate classification evaluation metrics.
+    """
 
     accuracy = accuracy_score(
         y_true,

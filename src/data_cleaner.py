@@ -2,14 +2,13 @@ import pandas as pd
 
 
 def clean_column_names(df):
-    """
-    Standardize column names.
-    """
+    """Standardize column names."""
 
     df = df.copy()
 
     df.columns = (
         df.columns
+        .astype(str)
         .str.strip()
         .str.lower()
         .str.replace(" ", "_")
@@ -20,67 +19,79 @@ def clean_column_names(df):
 
 
 def remove_duplicate_rows(df):
-    """
-    Remove duplicate rows.
-    """
+    """Remove duplicate rows."""
 
     df = df.copy()
 
-    duplicates_removed = df.duplicated().sum()
+    duplicates_removed = int(
+        df.duplicated().sum()
+    )
 
     df = df.drop_duplicates()
 
-    return df, int(duplicates_removed)
+    return df, duplicates_removed
 
 
 def handle_missing_values(df):
-    """
-    Handle missing values based on column data type.
-    """
+    """Fill missing values based on column type."""
 
     df = df.copy()
 
-    missing_before = int(df.isna().sum().sum())
+    missing_before = int(
+        df.isna().sum().sum()
+    )
 
     numeric_columns = df.select_dtypes(
         include="number"
     ).columns
 
     categorical_columns = df.select_dtypes(
-        include="object"
+        include=["object", "category", "bool"]
     ).columns
 
-    # Numeric columns → median
     for column in numeric_columns:
-        if df[column].isna().sum() > 0:
-            df[column] = df[column].fillna(
-                df[column].median()
-            )
 
-    # Categorical columns → mode
+        if df[column].isna().sum() > 0:
+
+            median = df[column].median()
+
+            if pd.notna(median):
+
+                df[column] = df[column].fillna(
+                    median
+                )
+
     for column in categorical_columns:
+
         if df[column].isna().sum() > 0:
 
             mode = df[column].mode()
 
             if not mode.empty:
+
                 df[column] = df[column].fillna(
                     mode.iloc[0]
                 )
+
             else:
+
                 df[column] = df[column].fillna(
                     "Unknown"
                 )
 
-    missing_after = int(df.isna().sum().sum())
+    missing_after = int(
+        df.isna().sum().sum()
+    )
 
-    return df, missing_before, missing_after
+    return (
+        df,
+        missing_before,
+        missing_after
+    )
+
 
 def detect_and_convert_dates(df):
-    """
-    Detect columns that are likely to contain dates
-    and convert them to datetime format.
-    """
+    """Detect columns that are likely to contain dates."""
 
     df = df.copy()
 
@@ -88,42 +99,60 @@ def detect_and_convert_dates(df):
 
     for column in df.columns:
 
-        if df[column].dtype == "object":
+        if df[column].dtype != "object":
+            continue
 
-            converted = pd.to_datetime(
-                df[column],
-                errors="coerce"
-            )
+        name = str(column).lower()
 
-            valid_ratio = converted.notna().mean()
+        if not any(
+            word in name
+            for word in [
+                "date",
+                "time",
+                "year",
+                "month"
+            ]
+        ):
+            continue
 
-            if valid_ratio >= 0.80:
-                df[column] = converted
-                date_columns.append(column)
+        converted = pd.to_datetime(
+            df[column],
+            errors="coerce"
+        )
+
+        valid_ratio = converted.notna().mean()
+
+        if valid_ratio >= 0.80:
+
+            df[column] = converted
+
+            date_columns.append(column)
 
     return df, date_columns
 
+
 def clean_dataset(df):
+    """Clean the uploaded dataset."""
 
     df = df.copy()
 
     original_rows = len(df)
 
-    # 1. Standardize column names
     df = clean_column_names(df)
 
-    # 2. Remove duplicate rows
-    df, duplicates_removed = remove_duplicate_rows(df)
+    df, duplicates_removed = (
+        remove_duplicate_rows(df)
+    )
 
-    # 3. Handle missing values
     (
         df,
         missing_before,
         missing_after
     ) = handle_missing_values(df)
 
-    # 4. Detect and convert date columns
-    df, date_columns = detect_and_convert_dates(df)
+    df, date_columns = (
+        detect_and_convert_dates(df)
+    )
 
     cleaned_rows = len(df)
 
