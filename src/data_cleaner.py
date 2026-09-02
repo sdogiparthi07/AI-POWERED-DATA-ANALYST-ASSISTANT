@@ -91,41 +91,26 @@ def handle_missing_values(df):
 
 
 def detect_and_convert_dates(df):
-    """Detect columns that are likely to contain dates."""
+    """Detect and convert date columns."""
 
     df = df.copy()
-
     date_columns = []
 
     for column in df.columns:
 
-        if df[column].dtype != "object":
-            continue
+        column_name = str(column).lower()
 
-        name = str(column).lower()
-
-        if not any(
-            word in name
-            for word in [
-                "date",
-                "time",
-                "year",
-                "month"
-            ]
-        ):
+        if "date" not in column_name:
             continue
 
         converted = pd.to_datetime(
             df[column],
+            format="%m/%d/%Y",
             errors="coerce"
         )
 
-        valid_ratio = converted.notna().mean()
-
-        if valid_ratio >= 0.80:
-
+        if converted.notna().mean() >= 0.80:
             df[column] = converted
-
             date_columns.append(column)
 
     return df, date_columns

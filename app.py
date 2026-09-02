@@ -352,7 +352,6 @@ elif page == "📂 Data Quality":
         profile = get_dataset_profile(
             cleaned_df
         )
-
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -435,8 +434,8 @@ elif page == "📊 Dashboard":
     st.title("📊 Data Dashboard")
 
     st.caption(
-        "Explore key metrics, patterns, and trends "
-        "automatically identified from your dataset."
+        "Explore meaningful metrics, distributions, category patterns, "
+        "and trends from your dataset."
     )
 
     if cleaned_df is None:
@@ -449,91 +448,54 @@ elif page == "📊 Dashboard":
 
         df = cleaned_df
 
-# DATASET OVERVIEW
+        numeric_columns = get_numeric_columns(df)
+        categorical_columns = get_categorical_columns(df)
+        date_columns = get_date_columns(df)
 
-        st.markdown("### 📋 Dataset Overview")
+        # Exclude identifier-like fields from automatic dashboard analysis.
+        # These columns are still available in the dataset and Visual Analytics.
+        identifier_names = {
+            "id",
+            "row_id",
+            "order_id",
+            "customer_id",
+            "product_id",
+            "postal_code",
+            "zip_code",
+            "zipcode"
+        }
 
-        col1, col2, col3, col4 = st.columns(4)
+        def is_identifier_column(column_name):
+            name = str(column_name).strip().lower()
 
-        with col1:
-            st.metric(
-                "Rows",
-                f"{df.shape[0]:,}"
+            return (
+                name in identifier_names
+                or name.endswith("_id")
+                or name.startswith("id_")
             )
 
-        with col2:
-            st.metric(
-                "Columns",
-                f"{df.shape[1]:,}"
+        dashboard_numeric_columns = [
+            column
+            for column in numeric_columns
+            if not is_identifier_column(column)
+        ]
+
+        dashboard_categorical_columns = [
+            column
+            for column in categorical_columns
+            if (
+                not is_identifier_column(column)
+                and df[column].nunique(dropna=True) <= 50
             )
+        ]
 
-        with col3:
-
-            numeric_columns = get_numeric_columns(df)
-
-            st.metric(
-                "Numeric Fields",
-                len(numeric_columns)
-            )
-
-        with col4:
-
-            categorical_columns = (
-                get_categorical_columns(df)
-            )
-
-            st.metric(
-                "Categorical Fields",
-                len(categorical_columns)
-            )
-
-# DATA QUALITY SNAPSHOT
-
-        st.divider()
-
-        st.markdown("### 🔎 Data Quality Snapshot")
-
-        missing_values = int(
-            df.isna().sum().sum()
-        )
-
-        duplicate_rows = int(
-            df.duplicated().sum()
-        )
-
-        complete_rows = int(
-            df.dropna().shape[0]
-        )
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.metric(
-                "Missing Values",
-                f"{missing_values:,}"
-            )
-
-        with col2:
-            st.metric(
-                "Duplicate Rows",
-                f"{duplicate_rows:,}"
-            )
-
-        with col3:
-            st.metric(
-                "Complete Rows",
-                f"{complete_rows:,}"
-            )
-
-# KEY NUMERIC METRICS
-
-        st.divider()
+        # KEY NUMERIC METRICS
 
         st.markdown("### 📈 Key Numeric Metrics")
 
-        if numeric_columns:
+        if dashboard_numeric_columns:
 
-            metric_columns = numeric_columns[:4]
+            metric_columns = dashboard_numeric_columns[:4]
 
             metric_cards = st.columns(
                 len(metric_columns)
@@ -544,9 +506,7 @@ elif page == "📊 Dashboard":
                 metric_columns
             ):
 
-                average_value = df[
-                    column_name
-                ].mean()
+                average_value = df[column_name].mean()
 
                 with card:
                     st.metric(
@@ -562,51 +522,73 @@ elif page == "📊 Dashboard":
         else:
 
             st.info(
-                "No numeric columns were detected."
+                "No suitable numeric columns were detected "
+                "for dashboard metrics."
             )
 
-# AUTOMATIC DASHBOARD VISUALS
+        # DATASET HIGHLIGHTS
 
         st.divider()
 
         st.markdown("### 📊 Dataset Highlights")
 
-# First numeric distribution
-
-        if numeric_columns:
+        if (
+            dashboard_numeric_columns
+            or dashboard_categorical_columns
+        ):
 
             dashboard_col1, dashboard_col2 = st.columns(2)
 
             with dashboard_col1:
 
-                st.markdown(
-                    f"**Distribution of {numeric_columns[0]}**"
-                )
+                if dashboard_numeric_columns:
 
-                histogram = create_histogram(
-                    df,
-                    numeric_columns[0]
-                )
+                    selected_numeric = st.selectbox(
+                        "Select numeric field",
+                        dashboard_numeric_columns,
+                        key="dashboard_numeric"
+                    )
 
-                st.plotly_chart(
-                    histogram,
-                    width="stretch"
-                )
+                    st.markdown(
+                        f"**Distribution of "
+                        f"{selected_numeric.replace('_', ' ').title()}**"
+                    )
 
-# First categorical distribution
+                    histogram = create_histogram(
+                        df,
+                        selected_numeric
+                    )
 
-            if categorical_columns:
+                    st.plotly_chart(
+                        histogram,
+                        width="stretch"
+                    )
 
-                with dashboard_col2:
+                else:
+
+                    st.info(
+                        "No suitable numeric field is available "
+                        "for distribution analysis."
+                    )
+
+            with dashboard_col2:
+
+                if dashboard_categorical_columns:
+
+                    selected_category = st.selectbox(
+                        "Select categorical field",
+                        dashboard_categorical_columns,
+                        key="dashboard_category"
+                    )
 
                     st.markdown(
                         f"**Category Distribution by "
-                        f"{categorical_columns[0]}**"
+                        f"{selected_category.replace('_', ' ').title()}**"
                     )
 
                     bar_chart = create_bar_chart(
                         df,
-                        categorical_columns[0]
+                        selected_category
                     )
 
                     st.plotly_chart(
@@ -614,27 +596,44 @@ elif page == "📊 Dashboard":
                         width="stretch"
                     )
 
- # TIME TREND
+                else:
 
-        date_columns = get_date_columns(df)
+                    st.info(
+                        "No suitable categorical field is available "
+                        "for category analysis."
+                    )
 
-        if date_columns and numeric_columns:
+        else:
+
+            st.info(
+                "No suitable fields were detected for dataset highlights."
+            )
+
+        # TIME TREND
+
+        if date_columns and dashboard_numeric_columns:
 
             st.divider()
 
             st.markdown("### 📈 Trend Over Time")
 
-            selected_date = st.selectbox(
-                "Date column",
-                date_columns,
-                key="dashboard_date"
-            )
+            col1, col2 = st.columns(2)
 
-            selected_value = st.selectbox(
-                "Numeric column",
-                numeric_columns,
-                key="dashboard_value"
-            )
+            with col1:
+
+                selected_date = st.selectbox(
+                    "Date column",
+                    date_columns,
+                    key="dashboard_date"
+                )
+
+            with col2:
+
+                selected_value = st.selectbox(
+                    "Numeric column",
+                    dashboard_numeric_columns,
+                    key="dashboard_value"
+                )
 
             line_chart = create_line_chart(
                 df,
@@ -647,13 +646,20 @@ elif page == "📊 Dashboard":
                 width="stretch"
             )
 
-# DASHBOARD NOTE
+        elif not date_columns:
+
+            st.info(
+                "No date column was detected for time-trend analysis."
+            )
+
+        # DASHBOARD NOTE
 
         st.divider()
 
         st.info(
-            "💡 For detailed variable selection and advanced "
-            "visual analysis, open the Visual Analytics page."
+            "💡 The Dashboard focuses on quick, meaningful insights. "
+            "For detailed variable selection and advanced visual analysis, "
+            "open the Visual Analytics page."
         )
 
 
@@ -922,7 +928,7 @@ elif page == "🤖 Machine Learning":
 
                         st.dataframe(
                             results_df,
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True
                         )
 
@@ -1081,7 +1087,7 @@ elif page == "🤖 Machine Learning":
 
                     st.plotly_chart(
                         elbow_chart,
-                        use_container_width=True
+                        width="stretch"
                     )
 
                     st.caption(
@@ -1155,7 +1161,7 @@ elif page == "🤖 Machine Learning":
 
                         st.dataframe(
                             cluster_summary,
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True
                         )
                         st.markdown("### 📊 Cluster Summary")
@@ -1177,7 +1183,7 @@ elif page == "🤖 Machine Learning":
 
                         st.dataframe(
                                 cluster_summary,
-                                use_container_width=True,
+                                width="stretch",
                                 hide_index=True
                             )
                         st.markdown("### 🔎 Cluster Profiles")
@@ -1191,7 +1197,7 @@ elif page == "🤖 Machine Learning":
 
                         st.dataframe(
                             cluster_profiles,
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True
                         )
                         st.markdown("### 📈 Cluster Distribution")
@@ -1217,7 +1223,7 @@ elif page == "🤖 Machine Learning":
 
                         st.plotly_chart(
                             fig,
-                            use_container_width=True
+                            width="stretch"
                         )
                         st.markdown("### 🎯 Cluster Visualization")
 
@@ -1242,7 +1248,7 @@ elif page == "🤖 Machine Learning":
 
                             st.plotly_chart(
                                 fig,
-                                use_container_width=True
+                                width="stretch"
                             )
 
                         else:
@@ -1255,7 +1261,7 @@ elif page == "🤖 Machine Learning":
 
                         st.dataframe(
                             result.head(100),
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True
                         )
                         st.markdown(
@@ -1304,7 +1310,7 @@ elif page == "🤖 Machine Learning":
 
                             st.plotly_chart(
                                 cluster_chart,
-                                use_container_width=True
+                                width="stretch"
                             )
 
                     except ValueError as error:
@@ -1448,4 +1454,3 @@ elif page == "🧠 AI Insights":
             st.write(
                 ai_insights
             )
-
