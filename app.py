@@ -685,12 +685,19 @@ elif page == "📈 Visual Analytics":
         df = cleaned_df
 
         numeric_columns = get_numeric_columns(df)
-        categorical_columns = get_categorical_columns(df)
-        date_columns = get_date_columns(df)
+# Remove Row ID and Postal Code from Visual Analytics
+    excluded_numeric_columns = ["row_id", "postal_code"]
+
+    numeric_columns = [
+        col for col in numeric_columns
+        if col.lower() not in excluded_numeric_columns
+    ]
+    categorical_columns = get_categorical_columns(df)
+    date_columns = get_date_columns(df)
 
 # HISTOGRAM
 
-        if numeric_columns:
+    if numeric_columns:
 
             st.markdown("### 📊 Distribution Analysis")
 
@@ -710,7 +717,7 @@ elif page == "📈 Visual Analytics":
                 width="stretch"
             )
 
-        else:
+    else:
 
             st.info(
                 "No numeric columns are available "
@@ -719,7 +726,7 @@ elif page == "📈 Visual Analytics":
 
 # BAR CHART
 
-        if categorical_columns:
+    if categorical_columns:
 
             st.divider()
 
@@ -741,7 +748,7 @@ elif page == "📈 Visual Analytics":
                 width="stretch"
             )
 
-        else:
+    else:
 
             st.info(
                 "No categorical columns are available "
@@ -750,7 +757,7 @@ elif page == "📈 Visual Analytics":
 
 # SCATTER PLOT
 
-        if len(numeric_columns) >= 2:
+    if len(numeric_columns) >= 2:
 
             st.divider()
 
@@ -790,7 +797,7 @@ elif page == "📈 Visual Analytics":
 
  # LINE CHART
 
-        if date_columns and numeric_columns:
+    if date_columns and numeric_columns:
 
             st.divider()
 
@@ -827,7 +834,7 @@ elif page == "📈 Visual Analytics":
 
 # CORRELATION HEATMAP
 
-        if len(numeric_columns) >= 2:
+    if len(numeric_columns) >= 2:
 
             st.divider()
 

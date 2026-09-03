@@ -95,13 +95,10 @@ def train_kmeans(df, n_clusters=3):
         numeric_data
     )
 
-# Use a sample for training on very large datasets
+    # Use a sample for training on very large datasets
     if len(scaled_data) > 5000:
-
         training_data = scaled_data[:5000]
-
     else:
-
         training_data = scaled_data
 
     model = KMeans(
@@ -118,31 +115,34 @@ def train_kmeans(df, n_clusters=3):
         scaled_data
     )
 
-# Use a sample for silhouette score on large datasets
+    # Create result dataframe
+    result = numeric_data.copy()
+    result["cluster"] = clusters
+
+    # Use a sample for silhouette score on large datasets
     score_sample_size = min(
-    3000,
-    len(scaled_data)
-)
+        3000,
+        len(scaled_data)
+    )
 
     score_data = scaled_data[
-    :score_sample_size
-]
+        :score_sample_size
+    ]
 
     score_clusters = clusters[
-    :score_sample_size
-]
+        :score_sample_size
+    ]
 
     if len(set(score_clusters)) >= 2:
 
-     score = silhouette_score(
-        score_data,
-        score_clusters
-    )
+        score = silhouette_score(
+            score_data,
+            score_clusters
+        )
 
     else:
-     score = 0.0
-     result = numeric_data.copy()
-     result["cluster"] = clusters
+        score = 0.0
+
     return (
         model,
         scaler,
