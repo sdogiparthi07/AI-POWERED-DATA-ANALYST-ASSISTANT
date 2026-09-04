@@ -156,11 +156,12 @@ if page == "🏠 Overview":
     st.markdown("### 👋 Get Started")
 
     st.write(
-        "Upload your dataset to begin exploring its structure, "
-        "patterns, and insights."
+        "Upload a CSV or Excel dataset to begin the analysis workflow. "
+        "The application will clean and prepare the dataset before making "
+        "it available across the different analysis sections."
     )
 
-# DATASET UPLOAD
+    # DATASET UPLOAD
 
     st.markdown("### 📂 Upload Your Dataset")
 
@@ -171,7 +172,8 @@ if page == "🏠 Overview":
     )
 
     if uploaded_file is not None:
-# Avoid unnecessary reprocessing of the same file
+
+        # Avoid unnecessary reprocessing of the same file
         if (
             st.session_state["uploaded_file_name"]
             != uploaded_file.name
@@ -187,18 +189,14 @@ if page == "🏠 Overview":
                 with st.spinner(
                     "Cleaning and preparing your dataset..."
                 ):
-                    cleaned_df, cleaning_report = clean_dataset(df)
+                    cleaned_df, cleaning_report = clean_dataset(
+                        df
+                    )
 
-# Store dataset in session state
+                # Store processed dataset in session state
                 st.session_state["cleaned_df"] = cleaned_df
-
-                st.session_state["cleaning_report"] = (
-                    cleaning_report
-                )
-
-                st.session_state["uploaded_file_name"] = (
-                    uploaded_file.name
-                )
+                st.session_state["cleaning_report"] = cleaning_report
+                st.session_state["uploaded_file_name"] = uploaded_file.name
 
                 st.success(
                     "Dataset uploaded and cleaned successfully!"
@@ -206,74 +204,42 @@ if page == "🏠 Overview":
 
                 st.rerun()
 
-            except Exception as e:
+            except Exception as error:
 
                 st.error(
-                    f"Unable to process the dataset: {e}"
+                    f"Unable to process the dataset: {error}"
                 )
 
-# SHOW DATASET STATUS
+    # DATASET STATUS
 
     if cleaned_df is not None:
 
         st.divider()
 
-        st.markdown("### 📋 Current Dataset")
+        st.markdown("### ✅ Dataset Ready")
 
-        col1, col2, col3, col4 = st.columns(4)
+        st.success(
+            f"{st.session_state['uploaded_file_name']} "
+            "has been successfully loaded, cleaned, "
+            "and prepared for analysis."
+        )
 
-        with col1:
-            st.metric(
-                "Rows",
-                f"{cleaned_df.shape[0]:,}"
-            )
-
-        with col2:
-            st.metric(
-                "Columns",
-                f"{cleaned_df.shape[1]:,}"
-            )
-
-        with col3:
-
-            numeric_count = len(
-                cleaned_df.select_dtypes(
-                    include="number"
-                ).columns
-            )
-
-            st.metric(
-                "Numeric Columns",
-                numeric_count
-            )
-
-        with col4:
-
-            categorical_count = len(
-                cleaned_df.select_dtypes(
-                    include=["object", "str"]
-                ).columns
-            )
-
-            st.metric(
-                "Categorical Columns",
-                categorical_count
-            )
-
-        st.divider()
-
-        st.markdown("### 🚀 Explore Your Dataset")
+        st.markdown("### 🚀 Analysis Workflow")
 
         st.write(
-            "Use the navigation menu on the left to explore "
-            "data quality, dashboards, visual analytics, "
-            "machine learning, natural-language questions, "
-            "and AI-generated insights."
+            "Use the navigation menu to review data quality, "
+            "explore key metrics and visualizations, "
+            "run machine-learning models, ask questions using "
+            "natural language, and generate AI-powered insights."
         )
 
     else:
 
         st.divider()
+
+        st.info(
+            "Upload a dataset above to begin your analysis."
+        )
 
 
 # DATA QUALITY PAGE
@@ -382,49 +348,105 @@ elif page == "📂 Data Quality":
             width="stretch"
         )
 
-# NUMERICAL ANALYSIS
+# USER-FRIENDLY NUMERICAL SUMMARY
 
         st.divider()
+        st.markdown("### 🔢 Numerical Summary")
 
-        st.markdown("### 🔢 Numerical Analysis")
+        numeric_columns = cleaned_df.select_dtypes(
+            include="number"
+        ).columns.tolist()
 
-        numeric_summary = get_numeric_summary(
-            cleaned_df
-        )
+        excluded_summary_columns = {
+            "id", "row_id", "order_id", "customer_id",
+            "product_id", "postal_code", "zip_code", "zipcode"
+        }
 
-        if not numeric_summary.empty:
+        numeric_columns = [
+            column
+            for column in numeric_columns
+            if (
+                column.lower() not in excluded_summary_columns
+                and not column.lower().endswith("_id")
+                and not column.lower().startswith("id_")
+            )
+        ]
+
+        if numeric_columns:
+
+            numeric_summary_rows = []
+
+            for column in numeric_columns:
+                numeric_summary_rows.append({
+                    "Column": column.replace("_", " ").title(),
+                    "Average": format_number(cleaned_df[column].mean()),
+                    "Median": format_number(cleaned_df[column].median()),
+                    "Minimum": format_number(cleaned_df[column].min()),
+                    "Maximum": format_number(cleaned_df[column].max())
+                })
 
             st.dataframe(
-                numeric_summary,
-                width="stretch"
+                pd.DataFrame(numeric_summary_rows),
+                width="stretch",
+                hide_index=True
+            )
+
+            st.caption(
+                "Average shows the typical value, Median shows the middle value, "
+                "and Minimum and Maximum show the observed range."
             )
 
         else:
+            st.info("No suitable numerical columns found.")
 
-            st.info(
-                "No numerical columns found."
-            )
+# CATEGORICAL SUMMARY
 
-# CATEGORICAL ANALYSIS
+        st.markdown("### 🔤 Categorical Summary")
 
-        st.markdown("### 🔤 Categorical Analysis")
+        categorical_columns = cleaned_df.select_dtypes(
+            include=["object", "category", "bool"]
+        ).columns.tolist()
 
-        categorical_summary = get_categorical_summary(
-            cleaned_df
-        )
+        if categorical_columns:
 
-        if not categorical_summary.empty:
+            categorical_summary_rows = []
+
+            for column in categorical_columns:
+
+                value_counts = cleaned_df[column].value_counts(
+                    dropna=True
+                )
+
+                if not value_counts.empty:
+                    most_common = str(value_counts.index[0])
+                    frequency = int(value_counts.iloc[0])
+                else:
+                    most_common = "N/A"
+                    frequency = 0
+
+                categorical_summary_rows.append({
+                    "Column": column.replace("_", " ").title(),
+                    "Unique Values": int(
+                        cleaned_df[column].nunique(dropna=True)
+                    ),
+                    "Most Common Value": most_common,
+                    "Frequency": frequency
+                })
 
             st.dataframe(
-                categorical_summary,
-                width="stretch"
+                pd.DataFrame(categorical_summary_rows),
+                width="stretch",
+                hide_index=True
+            )
+
+            st.caption(
+                "Unique Values shows how many different values exist. "
+                "Most Common Value shows the value that appears most often, "
+                "and Frequency shows how many times it appears."
             )
 
         else:
-
-            st.info(
-                "No categorical columns found."
-            )
+            st.info("No categorical columns found.")
 
 
 # DASHBOARD PAGE
@@ -434,8 +456,8 @@ elif page == "📊 Dashboard":
     st.title("📊 Data Dashboard")
 
     st.caption(
-        "Explore meaningful metrics, distributions, category patterns, "
-        "and trends from your dataset."
+        "Get a quick view of important numerical measures "
+        "across the complete cleaned dataset."
     )
 
     if cleaned_df is None:
@@ -447,22 +469,11 @@ elif page == "📊 Dashboard":
     else:
 
         df = cleaned_df
-
         numeric_columns = get_numeric_columns(df)
-        categorical_columns = get_categorical_columns(df)
-        date_columns = get_date_columns(df)
 
-        # Exclude identifier-like fields from automatic dashboard analysis.
-        # These columns are still available in the dataset and Visual Analytics.
         identifier_names = {
-            "id",
-            "row_id",
-            "order_id",
-            "customer_id",
-            "product_id",
-            "postal_code",
-            "zip_code",
-            "zipcode"
+            "id", "row_id", "order_id", "customer_id",
+            "product_id", "postal_code", "zip_code", "zipcode"
         }
 
         def is_identifier_column(column_name):
@@ -480,26 +491,13 @@ elif page == "📊 Dashboard":
             if not is_identifier_column(column)
         ]
 
-        dashboard_categorical_columns = [
-            column
-            for column in categorical_columns
-            if (
-                not is_identifier_column(column)
-                and df[column].nunique(dropna=True) <= 50
-            )
-        ]
-
-        # KEY NUMERIC METRICS
-
+# KEY NUMERIC METRICS
         st.markdown("### 📈 Key Numeric Metrics")
 
         if dashboard_numeric_columns:
 
             metric_columns = dashboard_numeric_columns[:4]
-
-            metric_cards = st.columns(
-                len(metric_columns)
-            )
+            metric_cards = st.columns(len(metric_columns))
 
             for card, column_name in zip(
                 metric_cards,
@@ -514,152 +512,197 @@ elif page == "📊 Dashboard":
                             f"Average "
                             f"{column_name.replace('_', ' ').title()}"
                         ),
-                        value=format_number(
-                            average_value
-                        )
+                        value=format_number(average_value)
                     )
+
+            st.caption(
+                "These averages are calculated across the complete "
+                "cleaned dataset."
+            )
 
         else:
 
             st.info(
-                "No suitable numeric columns were detected "
+                "No suitable numerical fields were detected "
                 "for dashboard metrics."
             )
 
-        # DATASET HIGHLIGHTS
+# TIME OVERVIEW
+        date_columns = get_date_columns(df)
 
-        st.divider()
-
-        st.markdown("### 📊 Dataset Highlights")
-
-        if (
-            dashboard_numeric_columns
-            or dashboard_categorical_columns
-        ):
-
-            dashboard_col1, dashboard_col2 = st.columns(2)
-
-            with dashboard_col1:
-
-                if dashboard_numeric_columns:
-
-                    selected_numeric = st.selectbox(
-                        "Select numeric field",
-                        dashboard_numeric_columns,
-                        key="dashboard_numeric"
-                    )
-
-                    st.markdown(
-                        f"**Distribution of "
-                        f"{selected_numeric.replace('_', ' ').title()}**"
-                    )
-
-                    histogram = create_histogram(
-                        df,
-                        selected_numeric
-                    )
-
-                    st.plotly_chart(
-                        histogram,
-                        width="stretch"
-                    )
-
-                else:
-
-                    st.info(
-                        "No suitable numeric field is available "
-                        "for distribution analysis."
-                    )
-
-            with dashboard_col2:
-
-                if dashboard_categorical_columns:
-
-                    selected_category = st.selectbox(
-                        "Select categorical field",
-                        dashboard_categorical_columns,
-                        key="dashboard_category"
-                    )
-
-                    st.markdown(
-                        f"**Category Distribution by "
-                        f"{selected_category.replace('_', ' ').title()}**"
-                    )
-
-                    bar_chart = create_bar_chart(
-                        df,
-                        selected_category
-                    )
-
-                    st.plotly_chart(
-                        bar_chart,
-                        width="stretch"
-                    )
-
-                else:
-
-                    st.info(
-                        "No suitable categorical field is available "
-                        "for category analysis."
-                    )
-
-        else:
-
-            st.info(
-                "No suitable fields were detected for dataset highlights."
-            )
-
-        # TIME TREND
-
-        if date_columns and dashboard_numeric_columns:
+        if date_columns:
 
             st.divider()
+            st.markdown("### 📅 Time Overview")
 
-            st.markdown("### 📈 Trend Over Time")
+            if len(date_columns) > 1:
 
-            col1, col2 = st.columns(2)
-
-            with col1:
-
-                selected_date = st.selectbox(
-                    "Date column",
+                selected_date_column = st.selectbox(
+                    "Select a date field",
                     date_columns,
-                    key="dashboard_date"
+                    key="dashboard_date_column"
                 )
 
-            with col2:
+            else:
 
-                selected_value = st.selectbox(
-                    "Numeric column",
-                    dashboard_numeric_columns,
-                    key="dashboard_value"
+                selected_date_column = date_columns[0]
+
+            dashboard_dates = pd.to_datetime(
+                df[selected_date_column],
+                errors="coerce"
+            ).dropna()
+
+            if not dashboard_dates.empty:
+
+                start_date = dashboard_dates.min()
+                end_date = dashboard_dates.max()
+
+                total_days = max(
+                    (end_date - start_date).days,
+                    0
                 )
 
-            line_chart = create_line_chart(
-                df,
-                selected_date,
-                selected_value
-            )
+                if total_days >= 730:
+                    time_span = f"{total_days / 365.25:.1f} years"
+                elif total_days >= 60:
+                    time_span = f"{total_days / 30.44:.1f} months"
+                else:
+                    time_span = f"{total_days:,} days"
 
-            st.plotly_chart(
-                line_chart,
-                width="stretch"
-            )
+                time_col1, time_col2 = st.columns(2)
 
-        elif not date_columns:
+                with time_col1:
+                    st.metric(
+                        "Data Period",
+                        (
+                            f"{start_date.strftime('%b %Y')} "
+                            f"– {end_date.strftime('%b %Y')}"
+                        )
+                    )
 
-            st.info(
-                "No date column was detected for time-trend analysis."
-            )
+                with time_col2:
+                    st.metric(
+                        "Time Span",
+                        time_span
+                    )
 
-        # DASHBOARD NOTE
+                st.markdown("#### Records Over Time")
+
+                time_data = pd.DataFrame({
+                    "date": pd.to_datetime(
+                        df[selected_date_column],
+                        errors="coerce"
+                    )
+                }).dropna()
+
+                # Choose the graph period automatically based on
+                # the actual range of the selected date column.
+                if total_days >= 730:
+                    # Long-range datasets: show one point per year.
+                    time_data["period"] = (
+                        time_data["date"]
+                        .dt.year
+                        .astype(str)
+                    )
+                    x_title = "Year"
+
+                elif total_days >= 90:
+                    # Medium-range datasets: show one point per month.
+                    time_data["period"] = (
+                        time_data["date"]
+                        .dt.to_period("M")
+                        .astype(str)
+                    )
+                    x_title = "Month"
+
+                else:
+                    # Short-range datasets: show one point per day.
+                    time_data["period"] = (
+                        time_data["date"]
+                        .dt.strftime("%Y-%m-%d")
+                    )
+                    x_title = "Date"
+
+                records_over_time = (
+                    time_data
+                    .groupby("period", sort=False)
+                    .size()
+                    .reset_index(name="records")
+                )
+
+                # Sort the periods chronologically.
+                if x_title == "Year":
+                    records_over_time["sort_key"] = (
+                        records_over_time["period"].astype(int)
+                    )
+
+                elif x_title == "Month":
+                    records_over_time["sort_key"] = pd.to_datetime(
+                        records_over_time["period"] + "-01",
+                        errors="coerce"
+                    )
+
+                else:
+                    records_over_time["sort_key"] = pd.to_datetime(
+                        records_over_time["period"],
+                        errors="coerce"
+                    )
+
+                records_over_time = (
+                    records_over_time
+                    .sort_values("sort_key")
+                    .drop(columns="sort_key")
+                )
+
+                time_chart = px.line(
+                    records_over_time,
+                    x="period",
+                    y="records",
+                    markers=True,
+                    labels={
+                        "period": x_title,
+                        "records": "Number of Records"
+                    }
+                )
+
+                # Keep every actual period from the selected date field
+                # visible in chronological order.
+                time_chart.update_xaxes(
+                    type="category",
+                    categoryorder="array",
+                    categoryarray=records_over_time["period"].tolist(),
+                    tickmode="array",
+                    tickvals=records_over_time["period"].tolist(),
+                    ticktext=records_over_time["period"].tolist()
+                )
+
+                time_chart.update_layout(
+                    xaxis_title=x_title,
+                    yaxis_title="Number of Records"
+                )
+
+                st.plotly_chart(
+                    time_chart,
+                    width="stretch"
+                )
+
+                st.caption(
+                    "This chart shows how the dataset records are "
+                    "distributed across the available time period."
+                )
+
+            else:
+
+                st.info(
+                    "A date field was detected, but it does not contain "
+                    "usable date values for the Time Overview."
+                )
 
         st.divider()
 
         st.info(
-            "💡 The Dashboard focuses on quick, meaningful insights. "
-            "For detailed variable selection and advanced visual analysis, "
-            "open the Visual Analytics page."
+            "For distributions, category comparisons, relationships, "
+            "trends, and correlations, use the Visual Analytics page."
         )
 
 
@@ -675,30 +718,28 @@ elif page == "📈 Visual Analytics":
     )
 
     if cleaned_df is None:
-
         st.warning(
             "Please upload a dataset from the Overview page first."
         )
 
     else:
-
         df = cleaned_df
 
         numeric_columns = get_numeric_columns(df)
-# Remove Row ID and Postal Code from Visual Analytics
-    excluded_numeric_columns = ["row_id", "postal_code"]
 
-    numeric_columns = [
-        col for col in numeric_columns
-        if col.lower() not in excluded_numeric_columns
-    ]
-    categorical_columns = get_categorical_columns(df)
-    date_columns = get_date_columns(df)
+        # Remove Row ID and Postal Code from Visual Analytics
+        excluded_numeric_columns = ["row_id", "postal_code"]
 
-# HISTOGRAM
+        numeric_columns = [
+            col for col in numeric_columns
+            if col.lower() not in excluded_numeric_columns
+        ]
 
-    if numeric_columns:
+        categorical_columns = get_categorical_columns(df)
+        date_columns = get_date_columns(df)
 
+        # HISTOGRAM
+        if numeric_columns:
             st.markdown("### 📊 Distribution Analysis")
 
             selected_numeric = st.selectbox(
@@ -707,29 +748,21 @@ elif page == "📈 Visual Analytics":
                 key="histogram_column"
             )
 
-            histogram = create_histogram(
-                df,
-                selected_numeric
-            )
+            histogram = create_histogram(df, selected_numeric)
 
             st.plotly_chart(
                 histogram,
                 width="stretch"
             )
-
-    else:
-
+        else:
             st.info(
                 "No numeric columns are available "
                 "for distribution analysis."
             )
 
-# BAR CHART
-
-    if categorical_columns:
-
+        # BAR CHART
+        if categorical_columns:
             st.divider()
-
             st.markdown("### 📊 Category Analysis")
 
             selected_category = st.selectbox(
@@ -738,37 +771,26 @@ elif page == "📈 Visual Analytics":
                 key="bar_column"
             )
 
-            bar_chart = create_bar_chart(
-                df,
-                selected_category
-            )
+            bar_chart = create_bar_chart(df, selected_category)
 
             st.plotly_chart(
                 bar_chart,
                 width="stretch"
             )
-
-    else:
-
+        else:
             st.info(
                 "No categorical columns are available "
                 "for category analysis."
             )
 
-# SCATTER PLOT
-
-    if len(numeric_columns) >= 2:
-
+        # SCATTER PLOT
+        if len(numeric_columns) >= 2:
             st.divider()
-
-            st.markdown(
-                "### 🔵 Relationship Between Variables"
-            )
+            st.markdown("### 🔵 Relationship Between Variables")
 
             col1, col2 = st.columns(2)
 
             with col1:
-
                 x_column = st.selectbox(
                     "X-axis",
                     numeric_columns,
@@ -776,7 +798,6 @@ elif page == "📈 Visual Analytics":
                 )
 
             with col2:
-
                 y_column = st.selectbox(
                     "Y-axis",
                     numeric_columns,
@@ -785,9 +806,7 @@ elif page == "📈 Visual Analytics":
                 )
 
             scatter_chart = create_scatter_plot(
-                df,
-                x_column,
-                y_column
+                df, x_column, y_column
             )
 
             st.plotly_chart(
@@ -795,18 +814,14 @@ elif page == "📈 Visual Analytics":
                 width="stretch"
             )
 
- # LINE CHART
-
-    if date_columns and numeric_columns:
-
+# LINE CHART
+        if date_columns and numeric_columns:
             st.divider()
-
             st.markdown("### 📈 Trend Over Time")
 
             col1, col2 = st.columns(2)
 
             with col1:
-
                 selected_date = st.selectbox(
                     "Date column",
                     date_columns,
@@ -814,7 +829,6 @@ elif page == "📈 Visual Analytics":
                 )
 
             with col2:
-
                 selected_value = st.selectbox(
                     "Value column",
                     numeric_columns,
@@ -822,9 +836,7 @@ elif page == "📈 Visual Analytics":
                 )
 
             line_chart = create_line_chart(
-                df,
-                selected_date,
-                selected_value
+                df, selected_date, selected_value
             )
 
             st.plotly_chart(
@@ -833,17 +845,12 @@ elif page == "📈 Visual Analytics":
             )
 
 # CORRELATION HEATMAP
-
-    if len(numeric_columns) >= 2:
-
+        if len(numeric_columns) >= 2:
             st.divider()
-
-            st.markdown(
-                "### 🔥 Correlation Analysis"
-            )
+            st.markdown("### 🔥 Correlation Analysis")
 
             heatmap = create_correlation_heatmap(
-                df
+                df[numeric_columns]
             )
 
             st.plotly_chart(
@@ -948,6 +955,13 @@ elif page == "🤖 Machine Learning":
                             f"{best_model}"
                         )
 
+                        st.caption(
+                            "RMSE is used as the primary selection metric because "
+                            "it measures prediction error in the same units as the "
+                            "target variable and penalizes larger errors. "
+                            "Lower RMSE indicates better predictive performance."
+                        )
+
                     except Exception as error:
 
                         import traceback
@@ -1028,13 +1042,38 @@ elif page == "🤖 Machine Learning":
                             width="stretch"
                         )
 
-                        st.markdown(
-                            "### 🏆 Best Classification Model"
-                        )
+                        best_f1 = results_df["F1 Score"].max()
 
-                        st.success(
-                            f"Best model based on F1 Score: "
-                            f"{best_model}"
+                        best_models = results_df.loc[
+                            results_df["F1 Score"] == best_f1,
+                            "Model"
+                        ].tolist()
+
+                        if len(best_models) == 1:
+                            st.markdown(
+                                "### 🏆 Best Classification Model"
+                            )
+
+                            st.success(
+                                f"Best model based on F1 Score: "
+                                f"{best_models[0]}"
+                            )
+
+                        else:
+                            st.markdown(
+                                "### 🏆 Best Classification Models"
+                            )
+
+                            st.success(
+                                f"Best models based on F1 Score: "
+                                f"{', '.join(best_models)}"
+                            )
+
+                        st.caption(
+                            "F1 Score is used as the primary selection metric because "
+                            "it balances precision and recall. Higher F1 Score indicates "
+                            "better classification performance. If multiple models achieve "
+                            "the same highest F1 Score, all tied models are reported."
                         )
 
                     except Exception as error:
@@ -1147,30 +1186,6 @@ elif page == "🤖 Machine Learning":
                             "Clustering completed successfully."
                         )
 
-                        st.metric(
-                            "Silhouette Score",
-                            round(score, 3)
-                        )
-
-                        st.markdown("### 📊 Cluster Summary")
-
-                        cluster_summary = (
-                            result["cluster"]
-                            .value_counts()
-                            .sort_index()
-                            .reset_index()
-                        )
-
-                        cluster_summary.columns = [
-                            "Cluster",
-                            "Records"
-                        ]
-
-                        st.dataframe(
-                            cluster_summary,
-                            width="stretch",
-                            hide_index=True
-                        )
                         st.markdown("### 📊 Cluster Summary")
 
                         cluster_summary = (
@@ -1232,38 +1247,6 @@ elif page == "🤖 Machine Learning":
                             fig,
                             width="stretch"
                         )
-                        st.markdown("### 🎯 Cluster Visualization")
-
-                        cluster_columns = [
-                            column
-                            for column in result.columns
-                            if column != "cluster"
-                        ]
-
-                        if len(cluster_columns) >= 2:
-
-                            x_column = cluster_columns[0]
-                            y_column = cluster_columns[1]
-
-                            fig = px.scatter(
-                                result,
-                                x=x_column,
-                                y=y_column,
-                                color="cluster",
-                                title=f"{x_column} vs {y_column} by Cluster"
-                            )
-
-                            st.plotly_chart(
-                                fig,
-                                width="stretch"
-                            )
-
-                        else:
-
-                            st.info(
-                                "At least two numeric columns are required "
-                                "for cluster visualization."
-                            )
                         st.markdown("### 📋 Clustered Data")
 
                         st.dataframe(
@@ -1294,7 +1277,7 @@ elif page == "🤖 Machine Learning":
                             with col2:
                                 y_column = [
                                     column
-                                    for column in cluster_columns
+                                    for column in clustering_columns
                                     if column != x_column
                                 ]
 
@@ -1344,13 +1327,14 @@ elif page == "💬 Ask Your Data":
     else:
 
         question = st.text_input(
-            "Ask a question about your dataset...",
-            placeholder=(
-                "Example: Which category has the highest value?"
-            )
+            "Ask a question about your dataset",
+            placeholder="Enter your question..."
         )
 
-        if st.button("🔍 Ask"):
+        if st.button(
+            "🔍 Ask",
+            type="primary"
+        ):
 
             if not question.strip():
 
@@ -1373,18 +1357,36 @@ elif page == "💬 Ask Your Data":
 
                 st.markdown("### 💡 Answer")
 
-# GROUPED RESULT WITH CHART
-
+# GROUPED / COMPARISON RESULT
                 if isinstance(answer, tuple):
 
                     results, grouped = answer
 
-                    for item in results:
-                        st.write(item)
+                    if len(grouped) > 0:
 
-                    st.markdown(
-                        "### 📊 Visualization"
+                        top_group = grouped.index[0]
+                        top_value = grouped.iloc[0]
+
+                        st.success(
+                            f"{top_group} has the highest value "
+                            f"at {top_value:,.2f}.\n\n "
+                            "The complete comparison is shown below."
+                        )
+
+                    result_df = grouped.reset_index()
+
+                    result_df.columns = [
+                        "Category",
+                        "Value"
+                    ]
+
+                    st.dataframe(
+                        result_df,
+                        width="stretch",
+                        hide_index=True
                     )
+
+                    st.markdown("### 📊 Comparison")
 
                     if (
                         "time" in question.lower()
@@ -1402,17 +1404,15 @@ elif page == "💬 Ask Your Data":
                         )
 
 # LIST RESULT
-
                 elif isinstance(answer, list):
 
                     for item in answer:
                         st.write(item)
 
-# TEXT RESULT
-
+# SINGLE NATURAL LANGUAGE ANSWER
                 else:
 
-                    st.write(answer)
+                    st.success(answer)
 
 
 # AI INSIGHTS PAGE
