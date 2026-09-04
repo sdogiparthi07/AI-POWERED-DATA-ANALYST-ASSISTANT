@@ -456,8 +456,8 @@ elif page == "📊 Dashboard":
     st.title("📊 Data Dashboard")
 
     st.caption(
-        "Get a quick view of important numerical measures "
-        "across the complete cleaned dataset."
+        "Get a quick interactive overview of the most useful "
+        "measures, categories, and time patterns in the dataset."
     )
 
     if cleaned_df is None:
@@ -470,6 +470,7 @@ elif page == "📊 Dashboard":
 
         df = cleaned_df
         numeric_columns = get_numeric_columns(df)
+        categorical_columns = get_categorical_columns(df)
 
         identifier_names = {
             "id", "row_id", "order_id", "customer_id",
@@ -491,40 +492,128 @@ elif page == "📊 Dashboard":
             if not is_identifier_column(column)
         ]
 
-# KEY NUMERIC METRICS
-        st.markdown("### 📈 Key Numeric Metrics")
+        dashboard_categorical_columns = [
+            column
+            for column in categorical_columns
+            if not is_identifier_column(column)
+        ]
 
-        if dashboard_numeric_columns:
+         # CATEGORY COMPARISON
+        if dashboard_categorical_columns and dashboard_numeric_columns:
 
-            metric_columns = dashboard_numeric_columns[:4]
-            metric_cards = st.columns(len(metric_columns))
+            st.divider()
+            st.markdown("### 📊 Category Comparison")
 
-            for card, column_name in zip(
-                metric_cards,
-                metric_columns
-            ):
+            col1, col2, col3 = st.columns(3)
 
-                average_value = df[column_name].mean()
+            with col1:
+                selected_category = st.selectbox(
+                    "Select a categorical field",
+                    dashboard_categorical_columns,
+                    key="dashboard_category_field"
+                )
 
-                with card:
-                    st.metric(
-                        label=(
-                            f"Average "
-                            f"{column_name.replace('_', ' ').title()}"
-                        ),
-                        value=format_number(average_value)
-                    )
+            with col2:
+                selected_measure = st.selectbox(
+                    "Select a numeric field",
+                    dashboard_numeric_columns,
+                    key="dashboard_category_measure"
+                )
 
-            st.caption(
-                "These averages are calculated across the complete "
-                "cleaned dataset."
+            with col3:
+                selected_calculation = st.selectbox(
+                    "Calculation",
+                    ["Total", "Average"],
+                    key="dashboard_category_calculation"
+                )
+
+            comparison_data = df[
+                [selected_category, selected_measure]
+            ].copy()
+
+            comparison_data[selected_measure] = pd.to_numeric(
+                comparison_data[selected_measure],
+                errors="coerce"
             )
 
-        else:
+            comparison_data = comparison_data.dropna(
+                subset=[selected_category, selected_measure]
+            )
 
+            if not comparison_data.empty:
+
+                if selected_calculation == "Total":
+                    grouped_data = (
+                        comparison_data
+                        .groupby(selected_category, as_index=False)[selected_measure]
+                        .sum()
+                    )
+                else:
+                    grouped_data = (
+                        comparison_data
+                        .groupby(selected_category, as_index=False)[selected_measure]
+                        .mean()
+                    )
+
+                grouped_data = (
+                    grouped_data
+                    .sort_values(selected_measure, ascending=False)
+                    .head(10)
+                )
+
+                category_label = selected_category.replace("_", " ").title()
+                measure_label = selected_measure.replace("_", " ").title()
+                calculation_label = selected_calculation
+
+                top_row = grouped_data.iloc[0]
+
+                st.metric(
+                    f"Highest {calculation_label} {measure_label}",
+                    str(top_row[selected_category]),
+                    format_number(top_row[selected_measure])
+                )
+
+                category_chart = px.bar(
+                    grouped_data,
+                    x=selected_category,
+                    y=selected_measure,
+                    title=f"{calculation_label} {measure_label} by {category_label}",
+                    labels={
+                        selected_category: category_label,
+                        selected_measure: f"{calculation_label} {measure_label}"
+                    }
+                )
+
+                st.plotly_chart(
+                    category_chart,
+                    width="stretch"
+                )
+
+                st.caption(
+                    f"This chart compares {calculation_label.lower()} "
+                    f"{measure_label.lower()} across {category_label.lower()}."
+                )
+
+            else:
+                st.info(
+                    "The selected fields do not contain enough usable "
+                    "values for category comparison."
+                )
+
+        elif not dashboard_categorical_columns:
+
+            st.divider()
+            st.info(
+                "No suitable categorical fields were detected "
+                "for category comparison."
+            )
+
+        elif not dashboard_numeric_columns:
+
+            st.divider()
             st.info(
                 "No suitable numerical fields were detected "
-                "for dashboard metrics."
+                "for category comparison."
             )
 
 # TIME OVERVIEW
@@ -598,7 +687,6 @@ elif page == "📊 Dashboard":
                 # Choose the graph period automatically based on
                 # the actual range of the selected date column.
                 if total_days >= 730:
-                    # Long-range datasets: show one point per year.
                     time_data["period"] = (
                         time_data["date"]
                         .dt.year
@@ -607,7 +695,6 @@ elif page == "📊 Dashboard":
                     x_title = "Year"
 
                 elif total_days >= 90:
-                    # Medium-range datasets: show one point per month.
                     time_data["period"] = (
                         time_data["date"]
                         .dt.to_period("M")
@@ -616,7 +703,6 @@ elif page == "📊 Dashboard":
                     x_title = "Month"
 
                 else:
-                    # Short-range datasets: show one point per day.
                     time_data["period"] = (
                         time_data["date"]
                         .dt.strftime("%Y-%m-%d")
@@ -630,7 +716,6 @@ elif page == "📊 Dashboard":
                     .reset_index(name="records")
                 )
 
-                # Sort the periods chronologically.
                 if x_title == "Year":
                     records_over_time["sort_key"] = (
                         records_over_time["period"].astype(int)
@@ -665,8 +750,6 @@ elif page == "📊 Dashboard":
                     }
                 )
 
-                # Keep every actual period from the selected date field
-                # visible in chronological order.
                 time_chart.update_xaxes(
                     type="category",
                     categoryorder="array",
@@ -701,8 +784,8 @@ elif page == "📊 Dashboard":
         st.divider()
 
         st.info(
-            "For distributions, category comparisons, relationships, "
-            "trends, and correlations, use the Visual Analytics page."
+            "For deeper distributions, relationships, trends, and "
+            "correlations, use the Visual Analytics page."
         )
 
 
@@ -727,7 +810,7 @@ elif page == "📈 Visual Analytics":
 
         numeric_columns = get_numeric_columns(df)
 
-        # Remove Row ID and Postal Code from Visual Analytics
+ # Remove Row ID and Postal Code from Visual Analytics
         excluded_numeric_columns = ["row_id", "postal_code"]
 
         numeric_columns = [
@@ -738,7 +821,7 @@ elif page == "📈 Visual Analytics":
         categorical_columns = get_categorical_columns(df)
         date_columns = get_date_columns(df)
 
-        # HISTOGRAM
+# HISTOGRAM
         if numeric_columns:
             st.markdown("### 📊 Distribution Analysis")
 
@@ -760,7 +843,7 @@ elif page == "📈 Visual Analytics":
                 "for distribution analysis."
             )
 
-        # BAR CHART
+ # BAR CHART
         if categorical_columns:
             st.divider()
             st.markdown("### 📊 Category Analysis")
@@ -783,7 +866,7 @@ elif page == "📈 Visual Analytics":
                 "for category analysis."
             )
 
-        # SCATTER PLOT
+# SCATTER PLOT
         if len(numeric_columns) >= 2:
             st.divider()
             st.markdown("### 🔵 Relationship Between Variables")
