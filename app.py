@@ -80,19 +80,38 @@ def load_uploaded_dataset(uploaded_file):
 
 def format_number(value):
     """
-    Format numeric values for dashboard display.
+    Format numeric values consistently across the application.
     """
 
     if pd.isna(value):
         return "N/A"
 
-    if abs(value) >= 1_000_000:
-        return f"{value / 1_000_000:.2f}M"
-
-    if abs(value) >= 1_000:
-        return f"{value / 1_000:.2f}K"
-
     return f"{value:,.2f}"
+
+
+IDENTIFIER_NAMES = {
+    "id", "row_id", "rowid", "record_id", "recordid",
+    "order_id", "customer_id", "product_id", "transaction_id",
+    "invoice_id", "user_id", "employee_id", "account_id",
+    "postal_code", "postcode", "zip_code", "zipcode", "zip"
+}
+
+
+def is_identifier_column(column_name):
+    """Return True for columns that look like identifiers or codes."""
+    name = (
+        str(column_name)
+        .strip()
+        .lower()
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+
+    return (
+        name in IDENTIFIER_NAMES
+        or name.endswith("_id")
+        or name.startswith("id_")
+    )
 # SIDEBAR
 
 with st.sidebar:
@@ -498,11 +517,12 @@ elif page == "📊 Dashboard":
             if not is_identifier_column(column)
         ]
 
-         # CATEGORY COMPARISON
+         # BAR CHART
         if dashboard_categorical_columns and dashboard_numeric_columns:
 
             st.divider()
-            st.markdown("### 📊 Category Comparison")
+            st.markdown("### 📊 Bar Chart")
+            st.caption("Compare a numerical measure across categories using total or average.")
 
             col1, col2, col3 = st.columns(3)
 
@@ -572,6 +592,13 @@ elif page == "📊 Dashboard":
                     str(top_row[selected_category]),
                     format_number(top_row[selected_measure])
                 )
+                st.success(
+                    f"Key Finding: {top_row[selected_category]} has the highest "
+                    f"{calculation_label.lower()} {measure_label.lower()} among the "
+                    f"displayed {category_label.lower()} values, at "
+                    f"{format_number(top_row[selected_measure])}."
+                )
+
 
                 category_chart = px.bar(
                     grouped_data,
@@ -616,171 +643,183 @@ elif page == "📊 Dashboard":
                 "for category comparison."
             )
 
-# TIME OVERVIEW
+        # LINE CHART
         date_columns = get_date_columns(df)
 
         if date_columns:
 
             st.divider()
-            st.markdown("### 📅 Time Overview")
+            st.markdown("### 📈 Line Chart")
+            st.caption("Track a numerical measure over time using total or average.")
 
-            if len(date_columns) > 1:
+            time_col1, time_col2, time_col3 = st.columns(3)
 
+            with time_col1:
                 selected_date_column = st.selectbox(
                     "Select a date field",
                     date_columns,
                     key="dashboard_date_column"
                 )
 
-            else:
+            with time_col2:
+                selected_time_measure = st.selectbox(
+                    "Select a numeric field",
+                    dashboard_numeric_columns,
+                    key="dashboard_time_measure"
+                ) if dashboard_numeric_columns else None
 
-                selected_date_column = date_columns[0]
+            with time_col3:
+                selected_time_calculation = st.selectbox(
+                    "Calculation",
+                    ["Total", "Average"],
+                    key="dashboard_time_calculation"
+                ) if dashboard_numeric_columns else None
 
-            dashboard_dates = pd.to_datetime(
-                df[selected_date_column],
-                errors="coerce"
-            ).dropna()
-
-            if not dashboard_dates.empty:
-
-                start_date = dashboard_dates.min()
-                end_date = dashboard_dates.max()
-
-                total_days = max(
-                    (end_date - start_date).days,
-                    0
-                )
-
-                if total_days >= 730:
-                    time_span = f"{total_days / 365.25:.1f} years"
-                elif total_days >= 60:
-                    time_span = f"{total_days / 30.44:.1f} months"
-                else:
-                    time_span = f"{total_days:,} days"
-
-                time_col1, time_col2 = st.columns(2)
-
-                with time_col1:
-                    st.metric(
-                        "Data Period",
-                        (
-                            f"{start_date.strftime('%b %Y')} "
-                            f"– {end_date.strftime('%b %Y')}"
-                        )
-                    )
-
-                with time_col2:
-                    st.metric(
-                        "Time Span",
-                        time_span
-                    )
-
-                st.markdown("#### Records Over Time")
-
-                time_data = pd.DataFrame({
-                    "date": pd.to_datetime(
-                        df[selected_date_column],
-                        errors="coerce"
-                    )
-                }).dropna()
-
-                # Choose the graph period automatically based on
-                # the actual range of the selected date column.
-                if total_days >= 730:
-                    time_data["period"] = (
-                        time_data["date"]
-                        .dt.year
-                        .astype(str)
-                    )
-                    x_title = "Year"
-
-                elif total_days >= 90:
-                    time_data["period"] = (
-                        time_data["date"]
-                        .dt.to_period("M")
-                        .astype(str)
-                    )
-                    x_title = "Month"
-
-                else:
-                    time_data["period"] = (
-                        time_data["date"]
-                        .dt.strftime("%Y-%m-%d")
-                    )
-                    x_title = "Date"
-
-                records_over_time = (
-                    time_data
-                    .groupby("period", sort=False)
-                    .size()
-                    .reset_index(name="records")
-                )
-
-                if x_title == "Year":
-                    records_over_time["sort_key"] = (
-                        records_over_time["period"].astype(int)
-                    )
-
-                elif x_title == "Month":
-                    records_over_time["sort_key"] = pd.to_datetime(
-                        records_over_time["period"] + "-01",
-                        errors="coerce"
-                    )
-
-                else:
-                    records_over_time["sort_key"] = pd.to_datetime(
-                        records_over_time["period"],
-                        errors="coerce"
-                    )
-
-                records_over_time = (
-                    records_over_time
-                    .sort_values("sort_key")
-                    .drop(columns="sort_key")
-                )
-
-                time_chart = px.line(
-                    records_over_time,
-                    x="period",
-                    y="records",
-                    markers=True,
-                    labels={
-                        "period": x_title,
-                        "records": "Number of Records"
-                    }
-                )
-
-                time_chart.update_xaxes(
-                    type="category",
-                    categoryorder="array",
-                    categoryarray=records_over_time["period"].tolist(),
-                    tickmode="array",
-                    tickvals=records_over_time["period"].tolist(),
-                    ticktext=records_over_time["period"].tolist()
-                )
-
-                time_chart.update_layout(
-                    xaxis_title=x_title,
-                    yaxis_title="Number of Records"
-                )
-
-                st.plotly_chart(
-                    time_chart,
-                    width="stretch"
-                )
-
-                st.caption(
-                    "This chart shows how the dataset records are "
-                    "distributed across the available time period."
-                )
-
-            else:
-
+            if not dashboard_numeric_columns:
                 st.info(
-                    "A date field was detected, but it does not contain "
-                    "usable date values for the Time Overview."
+                    "A date field was detected, but no suitable numerical field "
+                    "is available for time-based analysis."
+                )
+            else:
+                time_data = df[
+                    [selected_date_column, selected_time_measure]
+                ].copy()
+
+                time_data[selected_date_column] = pd.to_datetime(
+                    time_data[selected_date_column],
+                    errors="coerce"
+                )
+                time_data[selected_time_measure] = pd.to_numeric(
+                    time_data[selected_time_measure],
+                    errors="coerce"
+                )
+                time_data = time_data.dropna(
+                    subset=[selected_date_column, selected_time_measure]
                 )
 
+                if not time_data.empty:
+                    start_date = time_data[selected_date_column].min()
+                    end_date = time_data[selected_date_column].max()
+                    total_days = max((end_date - start_date).days, 0)
+
+                    if total_days >= 730:
+                        time_data["period"] = (
+                            time_data[selected_date_column]
+                            .dt.year
+                            .astype(str)
+                        )
+                        x_title = "Year"
+                    elif total_days >= 90:
+                        time_data["period"] = (
+                            time_data[selected_date_column]
+                            .dt.to_period("M")
+                            .astype(str)
+                        )
+                        x_title = "Month"
+                    else:
+                        time_data["period"] = (
+                            time_data[selected_date_column]
+                            .dt.strftime("%Y-%m-%d")
+                        )
+                        x_title = "Date"
+
+                    if selected_time_calculation == "Total":
+                        grouped_time = (
+                            time_data
+                            .groupby("period", as_index=False)[selected_time_measure]
+                            .sum()
+                        )
+                    else:
+                        grouped_time = (
+                            time_data
+                            .groupby("period", as_index=False)[selected_time_measure]
+                            .mean()
+                        )
+
+                    if x_title == "Year":
+                        grouped_time["sort_key"] = grouped_time["period"].astype(int)
+                    elif x_title == "Month":
+                        grouped_time["sort_key"] = pd.to_datetime(
+                            grouped_time["period"] + "-01",
+                            errors="coerce"
+                        )
+                    else:
+                        grouped_time["sort_key"] = pd.to_datetime(
+                            grouped_time["period"],
+                            errors="coerce"
+                        )
+
+                    grouped_time = (
+                        grouped_time
+                        .sort_values("sort_key")
+                        .drop(columns="sort_key")
+                    )
+
+                    measure_label = selected_time_measure.replace("_", " ").title()
+                    date_label = selected_date_column.replace("_", " ").title()
+
+                    summary_col1, summary_col2 = st.columns(2)
+
+                    with summary_col1:
+                        st.metric(
+                            "Data Period",
+                            f"{start_date.strftime('%b %Y')} – {end_date.strftime('%b %Y')}"
+                        )
+
+                    with summary_col2:
+                        overall_value = (
+                            time_data[selected_time_measure].sum()
+                            if selected_time_calculation == "Total"
+                            else time_data[selected_time_measure].mean()
+                        )
+                        st.metric(
+                            f"Overall {selected_time_calculation} {measure_label}",
+                            format_number(overall_value)
+                        )
+
+                    top_period_row = grouped_time.loc[
+                        grouped_time[selected_time_measure].idxmax()
+                    ]
+
+                    st.success(
+                        f"Time Finding: {top_period_row['period']} has the highest "
+                        f"{selected_time_calculation.lower()} {measure_label.lower()} "
+                        f"among the available time periods, at "
+                        f"{format_number(top_period_row[selected_time_measure])}."
+                    )
+
+                    time_chart = px.line(
+                        grouped_time,
+                        x="period",
+                        y=selected_time_measure,
+                        markers=True,
+                        title=f"{selected_time_calculation} {measure_label} Over Time",
+                        labels={
+                            "period": x_title,
+                            selected_time_measure: (
+                                f"{selected_time_calculation} {measure_label}"
+                            )
+                        }
+                    )
+
+                    time_chart.update_xaxes(
+                        type="category",
+                        categoryorder="array",
+                        categoryarray=grouped_time["period"].tolist()
+                    )
+
+                    st.plotly_chart(time_chart, width="stretch")
+
+                    st.caption(
+                        f"This chart shows how {selected_time_calculation.lower()} "
+                        f"{measure_label.lower()} changes over time using "
+                        f"{date_label.lower()} as the date field."
+                    )
+                else:
+                    st.info(
+                        "The selected date and numeric fields do not contain enough "
+                        "usable values for time analysis."
+                    )
         st.divider()
 
         st.info(
@@ -823,7 +862,8 @@ elif page == "📈 Visual Analytics":
 
 # HISTOGRAM
         if numeric_columns:
-            st.markdown("### 📊 Distribution Analysis")
+            st.markdown("### 📊 Histogram")
+            st.caption("Explore the distribution of a numerical field.")
 
             selected_numeric = st.selectbox(
                 "Select a numeric column",
@@ -837,6 +877,10 @@ elif page == "📈 Visual Analytics":
                 histogram,
                 width="stretch"
             )
+            st.caption(
+                f"Use this distribution to understand the spread, concentration, "
+                f"and possible outliers in {selected_numeric.replace('_', ' ')}."
+            )
         else:
             st.info(
                 "No numeric columns are available "
@@ -846,7 +890,8 @@ elif page == "📈 Visual Analytics":
  # BAR CHART
         if categorical_columns:
             st.divider()
-            st.markdown("### 📊 Category Analysis")
+            st.markdown("### 📊 Bar Chart")
+            st.caption("Compare the frequency of values in a categorical field.")
 
             selected_category = st.selectbox(
                 "Select a categorical column",
@@ -860,6 +905,10 @@ elif page == "📈 Visual Analytics":
                 bar_chart,
                 width="stretch"
             )
+            st.caption(
+                f"This chart shows how frequently values occur in "
+                f"{selected_category.replace('_', ' ')}."
+            )
         else:
             st.info(
                 "No categorical columns are available "
@@ -869,7 +918,8 @@ elif page == "📈 Visual Analytics":
 # SCATTER PLOT
         if len(numeric_columns) >= 2:
             st.divider()
-            st.markdown("### 🔵 Relationship Between Variables")
+            st.markdown("### 🔵 Scatter Plot")
+            st.caption("Explore the relationship between two numerical fields.")
 
             col1, col2 = st.columns(2)
 
@@ -897,10 +947,32 @@ elif page == "📈 Visual Analytics":
                 width="stretch"
             )
 
+            valid_pair = df[[x_column, y_column]].dropna()
+            if len(valid_pair) >= 2:
+                correlation_value = valid_pair[x_column].corr(valid_pair[y_column])
+                if pd.notna(correlation_value):
+                    strength = (
+                        "strong" if abs(correlation_value) >= 0.7
+                        else "moderate" if abs(correlation_value) >= 0.4
+                        else "weak"
+                    )
+                    direction = "positive" if correlation_value > 0 else "negative"
+                    if abs(correlation_value) < 0.1:
+                        st.caption(
+                            f"The selected variables show little to no linear "
+                            f"relationship (correlation {correlation_value:.2f})."
+                        )
+                    else:
+                        st.caption(
+                            f"The selected variables show a {strength} {direction} "
+                            f"linear relationship (correlation {correlation_value:.2f})."
+                        )
+
 # LINE CHART
         if date_columns and numeric_columns:
             st.divider()
-            st.markdown("### 📈 Trend Over Time")
+            st.markdown("### 📈 Line Chart")
+            st.caption("Explore how a numerical field changes over time.")
 
             col1, col2 = st.columns(2)
 
@@ -926,11 +998,16 @@ elif page == "📈 Visual Analytics":
                 line_chart,
                 width="stretch"
             )
+            st.caption(
+                f"This chart helps identify how {selected_value.replace('_', ' ')} "
+                f"changes across {selected_date.replace('_', ' ')}."
+            )
 
 # CORRELATION HEATMAP
         if len(numeric_columns) >= 2:
             st.divider()
-            st.markdown("### 🔥 Correlation Analysis")
+            st.markdown("### 🔥 Correlation Heatmap")
+            st.caption("Compare linear relationships among numerical fields.")
 
             heatmap = create_correlation_heatmap(
                 df[numeric_columns]
@@ -939,6 +1016,10 @@ elif page == "📈 Visual Analytics":
             st.plotly_chart(
                 heatmap,
                 width="stretch"
+            )
+            st.caption(
+                "Correlation values closer to 1 or -1 indicate stronger linear "
+                "relationships, while values near 0 indicate weaker linear relationships."
             )
 
 
@@ -982,9 +1063,12 @@ elif page == "🤖 Machine Learning":
                 "to predict a numerical target."
             )
 
-            numeric_columns = df.select_dtypes(
-                include="number"
-            ).columns.tolist()
+            numeric_columns = [
+                column
+                for column in df.select_dtypes(include="number").columns.tolist()
+                if not is_identifier_column(column)
+                and df[column].nunique(dropna=True) > 1
+            ]
 
             if not numeric_columns:
 
@@ -1010,7 +1094,13 @@ elif page == "🤖 Machine Learning":
 
                         results_df, best_model = (
                             compare_regression_models(
-                                df,
+                                df.drop(
+                                    columns=[
+                                        column for column in df.columns
+                                        if is_identifier_column(column)
+                                    ],
+                                    errors="ignore"
+                                ),
                                 target_column
                             )
                         )
@@ -1073,10 +1163,28 @@ elif page == "🤖 Machine Learning":
 
             for column in df.columns:
 
-                unique_values = df[column].nunique()
+                if is_identifier_column(column):
+                    continue
 
-                if 2 <= unique_values <= 20:
+                if pd.api.types.is_datetime64_any_dtype(df[column]):
+                    continue
+
+                unique_values = df[column].nunique(dropna=True)
+
+                if not 2 <= unique_values <= 20:
+                    continue
+
+                if (
+                    pd.api.types.is_object_dtype(df[column])
+                    or isinstance(df[column].dtype, pd.CategoricalDtype)
+                    or pd.api.types.is_bool_dtype(df[column])
+                ):
                     classification_columns.append(column)
+
+                elif pd.api.types.is_numeric_dtype(df[column]):
+                    non_null = df[column].dropna()
+                    if not non_null.empty and (non_null % 1 == 0).all():
+                        classification_columns.append(column)
 
             if not classification_columns:
 
@@ -1092,11 +1200,6 @@ elif page == "🤖 Machine Learning":
                     key="classification_target"
                 )
 
-                st.info(
-                    f"Selected target has "
-                    f"{df[target_column].nunique()} unique classes."
-                )
-
                 if st.button(
                     "🚀 Compare Classification Models",
                     key="compare_classification"
@@ -1106,7 +1209,13 @@ elif page == "🤖 Machine Learning":
 
                         results_df, best_model = (
                             compare_classification_models(
-                                df,
+                                df.drop(
+                                    columns=[
+                                        column for column in df.columns
+                                        if is_identifier_column(column)
+                                    ],
+                                    errors="ignore"
+                                ),
                                 target_column
                             )
                         )
@@ -1173,8 +1282,16 @@ elif page == "🤖 Machine Learning":
 
             st.markdown("### 🔵 K-Means Clustering")
 
+            clustering_df = df.drop(
+                columns=[
+                    column for column in df.columns
+                    if is_identifier_column(column)
+                ],
+                errors="ignore"
+            )
+
             clustering_columns = get_clustering_columns(
-                df
+                clustering_df
             )
 
             if len(clustering_columns) < 2:
@@ -1203,7 +1320,7 @@ elif page == "🤖 Machine Learning":
                 try:
 
                     elbow_results = calculate_elbow(
-                        df
+                        clustering_df
                     )
 
                     elbow_df = pd.DataFrame(
@@ -1255,7 +1372,7 @@ elif page == "🤖 Machine Learning":
 
                         model, scaler, result, score = (
                             train_kmeans(
-                                df,
+                                clustering_df,
                                 n_clusters
                             )
                         )
@@ -1342,7 +1459,7 @@ elif page == "🤖 Machine Learning":
                         )
 
                         clustering_columns = (
-                            get_clustering_columns(df)
+                            get_clustering_columns(clustering_df)
                         )
 
                         if len(clustering_columns) >= 2:
@@ -1451,8 +1568,8 @@ elif page == "💬 Ask Your Data":
                         top_value = grouped.iloc[0]
 
                         st.success(
-                            f"{top_group} has the highest value "
-                            f"at {top_value:,.2f}.\n\n "
+                            f"Based on your question, {top_group} has the highest "
+                            f"calculated result at {top_value:,.2f}.\n\n"
                             "The complete comparison is shown below."
                         )
 
