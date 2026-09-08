@@ -111,6 +111,75 @@ def is_identifier_column(column_name):
         or name.endswith("_id")
         or name.startswith("id_")
     )
+
+
+def is_dataset_related_question(df, question):
+    """
+    Return True only when the question appears to be related to the
+    currently uploaded dataset.
+
+    The check uses:
+    - dataset column names
+    - common analysis words
+    - a sample of categorical values from the dataset
+
+    This prevents Ask Your Data from behaving like a general-purpose chatbot.
+    """
+    import re
+
+    q = str(question).strip().lower()
+
+    if not q:
+        return False
+
+    # Normalize text for easier matching.
+    q_tokens = set(re.findall(r"[a-z0-9_]+", q))
+
+    # Very common dataset/analysis terms that indicate an analytical question.
+    analysis_terms = {
+        "average", "avg", "mean", "median", "minimum", "min", "maximum", "max",
+        "total", "sum", "count", "frequency", "highest", "lowest", "top", "bottom",
+        "distribution", "trend", "correlation", "relationship", "compare",
+        "comparison", "sales", "profit", "quantity", "discount", "records",
+        "rows", "columns", "category", "categories", "value", "values",
+        "dataset", "data"
+    }
+
+    # Match column names and their component words.
+    dataset_terms = set()
+    for column in df.columns:
+        normalized = str(column).strip().lower().replace("-", "_").replace(" ", "_")
+        dataset_terms.add(normalized)
+        dataset_terms.update(part for part in normalized.split("_") if part)
+
+    # Add a limited sample of categorical values, so questions such as
+    # "Which region has the highest sales?" or "What are sales in New York?"
+    # are recognized as dataset-related.
+    for column in df.select_dtypes(include=["object", "string", "category", "bool"]).columns:
+        values = (
+            df[column]
+            .dropna()
+            .astype(str)
+            .drop_duplicates()
+            .head(100)
+            .tolist()
+        )
+        for value in values:
+            normalized_value = value.strip().lower()
+            if normalized_value:
+                dataset_terms.update(re.findall(r"[a-z0-9_]+", normalized_value))
+
+    # Question is relevant when it references the dataset directly.
+    if q_tokens & dataset_terms:
+        return True
+
+    # Generic analytical questions are allowed only when they also look
+    # like a request about the uploaded data.
+    dataset_reference_terms = {"dataset", "data", "records", "rows", "columns"}
+    if (q_tokens & analysis_terms) and (q_tokens & dataset_reference_terms):
+        return True
+
+    return False
 # SIDEBAR
 
 with st.sidebar:
@@ -1122,32 +1191,16 @@ elif page == "🤖 Machine Learning":
                 "to predict a categorical target."
             )
 
-            classification_columns = []
-
-            for column in df.columns:
-
-                if is_identifier_column(column):
-                    continue
-
-                if pd.api.types.is_datetime64_any_dtype(df[column]):
-                    continue
-
-                unique_values = df[column].nunique(dropna=True)
-
-                if not 2 <= unique_values <= 20:
-                    continue
-
-                if (
-                    pd.api.types.is_object_dtype(df[column])
-                    or isinstance(df[column].dtype, pd.CategoricalDtype)
-                    or pd.api.types.is_bool_dtype(df[column])
-                ):
-                    classification_columns.append(column)
-
-                elif pd.api.types.is_numeric_dtype(df[column]):
-                    non_null = df[column].dropna()
-                    if not non_null.empty and (non_null % 1 == 0).all():
-                        classification_columns.append(column)
+            # Use the same categorical-column detection used elsewhere
+            # in the application. This supports object, string, category,
+            # and boolean dtypes while excluding identifiers and dates.
+            classification_columns = [
+                column
+                for column in get_categorical_columns(df)
+                if not is_identifier_column(column)
+                and not pd.api.types.is_datetime64_any_dtype(df[column])
+                and 2 <= df[column].nunique(dropna=True) <= 20
+            ]
 
             if not classification_columns:
 
@@ -1507,75 +1560,86 @@ elif page == "💬 Ask Your Data":
 
             else:
 
-                with st.spinner(
-                    "Analyzing your question..."
+                if not is_dataset_related_question(
+                    cleaned_df,
+                    question
                 ):
-
-                    answer = answer_question(
-                        cleaned_df,
-                        question
+                    st.warning(
+                        "Oops! This question wandered outside the dataset. " \
+                        "Please try a question related to the available data.."
                     )
 
-                st.divider()
-
-                st.markdown("### 💡 Answer")
-
-# GROUPED / COMPARISON RESULT
-                if isinstance(answer, tuple):
-
-                    results, grouped = answer
-
-                    if len(grouped) > 0:
-
-                        top_group = grouped.index[0]
-                        top_value = grouped.iloc[0]
-
-                        st.success(
-                            f"Based on your question, {top_group} has the highest "
-                            f"calculated result at {top_value:,.2f}.\n\n"
-                            "The complete comparison is shown below."
-                        )
-
-                    result_df = grouped.reset_index()
-
-                    result_df.columns = [
-                        "Category",
-                        "Value"
-                    ]
-
-                    st.dataframe(
-                        result_df,
-                        width="stretch",
-                        hide_index=True
-                    )
-
-                    st.markdown("### 📊 Comparison")
-
-                    if (
-                        "time" in question.lower()
-                        or "trend" in question.lower()
-                    ):
-
-                        st.line_chart(
-                            grouped
-                        )
-
-                    else:
-
-                        st.bar_chart(
-                            grouped
-                        )
-
-# LIST RESULT
-                elif isinstance(answer, list):
-
-                    for item in answer:
-                        st.write(item)
-
-# SINGLE NATURAL LANGUAGE ANSWER
                 else:
 
-                    st.success(answer)
+                    with st.spinner(
+                        "Analyzing your question..."
+                    ):
+
+                        answer = answer_question(
+                            cleaned_df,
+                            question
+                        )
+
+                    st.divider()
+
+                    st.markdown("### 💡 Answer")
+
+# GROUPED / COMPARISON RESULT
+                    if isinstance(answer, tuple):
+
+                        results, grouped = answer
+
+                        if len(grouped) > 0:
+
+                            top_group = grouped.index[0]
+                            top_value = grouped.iloc[0]
+
+                            st.success(
+                                f"Based on your question, {top_group} has the highest "
+                                f"calculated result at {top_value:,.2f}.\n\n"
+                                "The complete comparison is shown below."
+                            )
+
+                        result_df = grouped.reset_index()
+
+                        result_df.columns = [
+                            "Category",
+                            "Value"
+                        ]
+
+                        st.dataframe(
+                            result_df,
+                            width="stretch",
+                            hide_index=True
+                        )
+
+                        st.markdown("### 📊 Comparison")
+
+                        if (
+                            "time" in question.lower()
+                            or "trend" in question.lower()
+                        ):
+
+                            st.line_chart(
+                                grouped
+                            )
+
+                        else:
+
+                            st.bar_chart(
+                                grouped
+                            )
+
+    # LIST RESULT
+                    elif isinstance(answer, list):
+
+                        for item in answer:
+                            st.write(item)
+
+    # SINGLE NATURAL LANGUAGE ANSWER
+                    else:
+
+                        st.success(answer)
 
 
 # AI INSIGHTS PAGE
