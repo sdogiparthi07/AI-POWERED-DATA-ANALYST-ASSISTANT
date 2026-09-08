@@ -17,7 +17,6 @@ from src.visualization import (
     create_histogram,
     create_bar_chart,
     create_scatter_plot,
-    create_line_chart,
     create_correlation_heatmap,
     create_elbow_plot
 )
@@ -423,7 +422,7 @@ elif page == "📂 Data Quality":
         st.markdown("### 🔤 Categorical Summary")
 
         categorical_columns = cleaned_df.select_dtypes(
-            include=["object", "category", "bool"]
+            include=["object", "str", "category", "bool"]
         ).columns.tolist()
 
         if categorical_columns:
@@ -858,7 +857,6 @@ elif page == "📈 Visual Analytics":
         ]
 
         categorical_columns = get_categorical_columns(df)
-        date_columns = get_date_columns(df)
 
 # HISTOGRAM
         if numeric_columns:
@@ -967,41 +965,6 @@ elif page == "📈 Visual Analytics":
                             f"The selected variables show a {strength} {direction} "
                             f"linear relationship (correlation {correlation_value:.2f})."
                         )
-
-# LINE CHART
-        if date_columns and numeric_columns:
-            st.divider()
-            st.markdown("### 📈 Line Chart")
-            st.caption("Explore how a numerical field changes over time.")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                selected_date = st.selectbox(
-                    "Date column",
-                    date_columns,
-                    key="line_date"
-                )
-
-            with col2:
-                selected_value = st.selectbox(
-                    "Value column",
-                    numeric_columns,
-                    key="line_value"
-                )
-
-            line_chart = create_line_chart(
-                df, selected_date, selected_value
-            )
-
-            st.plotly_chart(
-                line_chart,
-                width="stretch"
-            )
-            st.caption(
-                f"This chart helps identify how {selected_value.replace('_', ' ')} "
-                f"changes across {selected_date.replace('_', ' ')}."
-            )
 
 # CORRELATION HEATMAP
         if len(numeric_columns) >= 2:
